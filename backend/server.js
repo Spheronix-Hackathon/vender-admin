@@ -101,15 +101,7 @@ db.once('open', () => {
     }
 });
 
-// Startup sync for Vendor colleges & categories
-setTimeout(() => {
-    try {
-        const syncCollegesAndCategories = require('./scripts/syncCollegesAndCategoriesToVendor');
-        syncCollegesAndCategories().catch(err => console.error('[COLLEGES/CATEGORIES VENDOR SYNC] error:', err.message));
-    } catch (e) {
-        console.warn('[SCHEDULED SYNC] warning:', e.message);
-    }
-}, 2500);
+
 
 // Vendor Change Streams for Live Updates
 const { clearDashboardCache } = require('./controllers/analyticsController');
