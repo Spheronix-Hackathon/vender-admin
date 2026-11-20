@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+dist/
+build/
+
+# Environment
+.env*
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Debug files
+debug_*.json
+all_receipts_audit.json
+backend/debug_submissions.json
+*.log
+
+# Uploads
+backend/uploads/
+uploads/

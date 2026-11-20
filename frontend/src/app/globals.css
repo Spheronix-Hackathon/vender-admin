@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+:root {
+  --apple-bg: #f5f5f7;
+  --apple-card: rgba(255, 255, 255, 0.7);
+  --apple-glass: rgba(255, 255, 255, 0.4);
+  --apple-border: rgba(0, 0, 0, 0.1);
+  --apple-text: #1d1d1f;
+  --apple-text-secondary: #86868b;
+  --apple-blue: #007aff;
+  --apple-green: #34c759;
+  --apple-red: #ff3b30;
+  --apple-radius: 1.125rem;
+  /* 18px */
+  --apple-shadow: 0 4px 30px rgba(0, 0, 0, 0.05);
+  --apple-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Icons", "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+
+  /* Responsive Layout Variables */
+  --sidebar-width: clamp(200px, 15vw, 256px);
+  --main-padding: clamp(1rem, 3vw, 2.5rem);
+}
+
+body {
+  background-color: var(--apple-bg);
+  color: var(--apple-text);
+  font-family: var(--apple-font);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  font-size: clamp(0.875rem, 0.9vw, 1rem);
+  /* Dynamic base font size */
+}
+
+.glass-card {
+  background: var(--apple-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--apple-border);
+  border-radius: var(--apple-radius);
+  box-shadow: var(--apple-shadow);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  transform: translateY(-2px);
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  color: var(--apple-text-secondary);
+  transition: all 0.2s ease;
+  text-decoration: none;
+  font-weight: 500;
+  font-size: clamp(0.8125rem, 0.85vw, 0.9375rem);
+}
+
+.sidebar-link.active,
+.sidebar-link:hover {
+  background: rgba(0, 122, 255, 0.1);
+  color: var(--apple-blue);
+}
+
+.kpi-card {
+  padding: clamp(1.25rem, 2vw, 1.75rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.kpi-value {
+  font-size: clamp(1.5rem, 2.2vw, 2.25rem);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.kpi-label {
+  font-size: clamp(0.75rem, 0.8vw, 0.875rem);
+  color: var(--apple-text-secondary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+h2 {
+  font-size: clamp(1.5rem, 2.5vw, 2rem);
+}
+
+h3 {
+  font-size: clamp(1.125rem, 1.8vw, 1.5rem);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
