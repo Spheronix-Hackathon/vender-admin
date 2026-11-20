@@ -1,6 +1,11 @@
 import axios from 'axios';
 
 const getBaseUrl = () => {
+    // 1. If NEXT_PUBLIC_API_URL is configured (e.g. deployed on Render/Vercel), always use it!
+    if (process.env.NEXT_PUBLIC_API_URL) {
+        return process.env.NEXT_PUBLIC_API_URL;
+    }
+    // 2. Client-side browser resolution
     if (typeof window !== 'undefined') {
         const { hostname, protocol } = window.location;
         // If accessed through HTTPS or Cloudflare tunnel, use relative path so Next.js proxies to backend without mixed content
@@ -9,7 +14,8 @@ const getBaseUrl = () => {
         }
         return `http://${hostname}:5050/api`;
     }
-    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5050/api';
+    // 3. Fallback
+    return 'http://localhost:5050/api';
 };
 
 export const api = axios.create({
