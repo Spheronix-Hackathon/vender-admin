@@ -35,7 +35,6 @@ async function sendOTPEmail(toEmail, otp, subject, context) {
     console.log(`  [AUTH OTP] Email: ${toEmail} | Code: >>> ${otp} <<<`);
     console.log(`======================================================\n`);
 
-    const transporter = createTransporter();
     const fromAddress = process.env.MAIL_FROM || process.env.SMTP_USER || 'spheronixhackathon@gmail.com';
     const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #f9f9fb; border-radius: 16px;">
@@ -53,7 +52,51 @@ async function sendOTPEmail(toEmail, otp, subject, context) {
       <p style="text-align: center; color: #86868b; font-size: 11px; margin-top: 20px;">If you did not request this, please ignore this email.</p>
     </div>`;
 
+    // 1. Try Resend HTTPS API (Port 443 - never blocked by Render)
+    if (process.env.RESEND_API_KEY) {
+        try {
+            console.log(`[AUTH] Sending OTP via Resend HTTPS API (Port 443)...`);
+            const axios = require('axios');
+            const resendRes = await axios.post('https://api.resend.com/emails', {
+                from: process.env.RESEND_FROM || 'Spheronix Admin <onboarding@resend.dev>',
+                to: [toEmail],
+                subject: subject,
+                html: html
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 8000
+            });
+            console.log(`[AUTH] ✓ Email delivered via Resend API:`, resendRes.data?.id);
+            return true;
+        } catch (resendErr) {
+            console.error(`[AUTH] Resend API error:`, resendErr.response?.data || resendErr.message);
+        }
+    }
+
+    // 2. Try Webhook (Port 443 - never blocked by Render)
+    if (process.env.GMAIL_WEBHOOK_URL) {
+        try {
+            console.log(`[AUTH] Sending OTP via Gmail Webhook (Port 443)...`);
+            const axios = require('axios');
+            const whRes = await axios.post(process.env.GMAIL_WEBHOOK_URL, {
+                to: toEmail,
+                subject: subject,
+                html: html
+            }, { timeout: 8000 });
+            console.log(`[AUTH] ✓ Email delivered via Gmail Webhook:`, whRes.data);
+            return true;
+        } catch (whErr) {
+            console.error(`[AUTH] Gmail Webhook error:`, whErr.message);
+        }
+    }
+
+    // 3. Nodemailer SMTP (Port 465 / 587)
     try {
+        console.log(`[AUTH] Attempting Nodemailer SMTP...`);
+        const transporter = createTransporter();
         const info = await transporter.sendMail({
             from: `"Spheronix Admin" <${fromAddress}>`,
             to: toEmail,
@@ -63,7 +106,7 @@ async function sendOTPEmail(toEmail, otp, subject, context) {
         console.log(`[AUTH] OTP email sent successfully to ${toEmail}: ${info.response || 'OK'}`);
         return true;
     } catch (error) {
-        console.error(`[AUTH] Notice sending email to ${toEmail}:`, error.message);
+        console.error(`[AUTH] SMTP delivery error:`, error.message);
         return false;
     }
 }
@@ -146,8 +189,7 @@ exports.login = async (req, res) => {
         return res.status(200).json({ 
             message: 'OTP sent to your email. Please verify to continue.',
             requireOtp: true,
-            email: admin.email,
-            devOtp: otp
+            email: admin.email
         });
     } catch (err) {
         console.error('[AUTH] Login error detailed:', {
@@ -222,7 +264,7 @@ exports.resendLoginOTP = async (req, res) => {
             'Resending your login OTP'
         ).catch(err => console.warn('[AUTH] Background resend email notice:', err.message));
 
-        return res.status(200).json({ message: 'New OTP sent to your email.', devOtp: otp });
+        return res.status(200).json({ message: 'New OTP sent to your email.' });
     } catch (err) {
         console.error('Resend login OTP error:', err);
         return res.status(500).json({ message: 'Server error.' });
