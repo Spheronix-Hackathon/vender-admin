@@ -162,8 +162,28 @@ const IndividualStudentTable = ({ data, onStatusUpdate, onReAdd, selectedIds = [
     const [isDeleting, setIsDeleting] = useState(false);
     const [studentToEditDetails, setStudentToEditDetails] = useState<Student | null>(null);
 
-    const [adminEmail, setAdminEmail] = useState<string | null>(null);
-    const [userRole, setUserRole] = useState<string | null>(null);
+    const [adminEmail, setAdminEmail] = useState<string | null>(() => {
+        if (typeof window === 'undefined') return null;
+        const token = localStorage.getItem('admin_token');
+        if (token && token.includes('.')) {
+            try {
+                const payload = JSON.parse(window.atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+                return payload.email || null;
+            } catch (e) {}
+        }
+        return null;
+    });
+    const [userRole, setUserRole] = useState<string | null>(() => {
+        if (typeof window === 'undefined') return null;
+        const token = localStorage.getItem('admin_token');
+        if (token && token.includes('.')) {
+            try {
+                const payload = JSON.parse(window.atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+                return payload.role || null;
+            } catch (e) {}
+        }
+        return null;
+    });
     const [editingStudentForTrackTask, setEditingStudentForTrackTask] = useState<Student | null>(null);
     const [editingStudentForCollege, setEditingStudentForCollege] = useState<Student | null>(null);
     const [tableData, setTableData] = useState<Student[]>(data);
@@ -686,7 +706,9 @@ const IndividualStudentTable = ({ data, onStatusUpdate, onReAdd, selectedIds = [
                             <th className="p-5 text-xs font-semibold text-[#86868b] tracking-wider uppercase">Remaining Time</th>
                             <th className="p-5 text-xs font-semibold text-[#86868b] tracking-wider uppercase">GitHub</th>
                             <th className="p-5 text-xs font-semibold text-[#86868b] tracking-wider uppercase">Exam</th>
-                            <th className="p-5 text-xs font-semibold text-[#86868b] tracking-wider uppercase">Started By</th>
+                            {isSuperAdmin && (
+                                <th className="p-5 text-xs font-semibold text-[#86868b] tracking-wider uppercase">Started By</th>
+                            )}
                             <th className="p-5 text-xs font-semibold text-[#86868b] tracking-wider uppercase min-w-[200px]">User Feedback</th>
                             <th className="p-5 text-xs font-semibold text-[#86868b] tracking-wider uppercase">Actions</th>
                             <th className="p-4 text-xs font-semibold text-[#86868b] tracking-wider uppercase min-w-[280px]">
@@ -1064,13 +1086,15 @@ const IndividualStudentTable = ({ data, onStatusUpdate, onReAdd, selectedIds = [
                                                 <span className="px-2 py-1 bg-gray-50 text-gray-400 text-[10px] font-bold rounded uppercase">Not Started</span>
                                             )}
                                         </td>
-                                        <td className="p-5 min-w-[120px]">
-                                            {student.examStartedBy ? (
-                                                <span className="text-[11px] font-medium text-[#007aff] break-all">{student.examStartedBy}</span>
-                                            ) : (
-                                                <span className="text-xs text-[#86868b] italic">Not Started</span>
-                                            )}
-                                        </td>
+                                        {isSuperAdmin && (
+                                            <td className="p-5 min-w-[120px]">
+                                                {student.examStartedBy ? (
+                                                    <span className="text-[11px] font-medium text-[#007aff] break-all">{student.examStartedBy}</span>
+                                                ) : (
+                                                    <span className="text-xs text-[#86868b] italic">Not Started</span>
+                                                )}
+                                            </td>
+                                        )}
                                         <td className="p-5 min-w-[200px]">
                                             {student.user_feedback ? (
                                                 <div className="relative group cursor-default">
