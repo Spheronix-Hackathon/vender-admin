@@ -194,22 +194,22 @@ export default function AnalyticsPage() {
                             <span>Pending Students: <strong className="font-bold">{currentMetrics.pendingStudents.toLocaleString()}</strong></span>
                         </div>
                         <div className="inline-flex items-center gap-1.5 bg-purple-50 border border-purple-200/60 text-purple-700 px-3 py-1.5 rounded-xl shadow-xs">
-                            <Coins className="w-3.5 h-3.5 text-purple-600" />
-                            <span>Revenue: <strong className="font-bold">₹{currentMetrics.revenue.toLocaleString('en-IN')}</strong></span>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-purple-600" />
+                            <span>Completion Rate: <strong className="font-bold">{currentMetrics.totalRegistrations > 0 ? Math.round((currentMetrics.approvedStudents / currentMetrics.totalRegistrations) * 100) : 100}%</strong></span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 glass-card p-6 md:p-10 min-h-[400px] aspect-[4/3] lg:aspect-auto lg:h-[clamp(350px,30vh,450px)]">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="lg:col-span-2 glass-card p-6 md:p-10 min-h-[400px]">
                     <h3 className="text-xl font-semibold mb-8">Registration Velocity</h3>
                     <AnalyticsChart data={regTimeline} title="" type="line" />
                 </div>
-                
+
                 <div className="glass-card p-6 md:p-10 min-h-[400px] aspect-[4/3] lg:aspect-auto lg:h-[clamp(350px,30vh,450px)]">
-                    <h3 className="text-xl font-semibold mb-8">Revenue Growth</h3>
-                    <AnalyticsChart data={revTimeline} title="" type="area" dataKey="amount" color="#34c759" />
+                    <h3 className="text-xl font-semibold mb-8">Participation Mode</h3>
+                    <AnalyticsChart data={participationData} title="" color="#ff9500" />
                 </div>
 
                 <div className="glass-card p-6 md:p-10 min-h-[400px] aspect-[4/3] lg:aspect-auto lg:h-[clamp(350px,30vh,450px)]">
@@ -217,14 +217,9 @@ export default function AnalyticsPage() {
                     <AnalyticsChart data={collegeData} title="" />
                 </div>
 
-                <div className="glass-card p-6 md:p-10 min-h-[400px] aspect-[4/3] lg:aspect-auto lg:h-[clamp(350px,30vh,450px)]">
+                <div className="lg:col-span-2 glass-card p-6 md:p-10 min-h-[400px]">
                     <h3 className="text-xl font-semibold mb-8">Project Distribution</h3>
                     <AnalyticsChart data={trackData} title="" color="#8a2be2" />
-                </div>
-
-                <div className="glass-card p-6 md:p-10 min-h-[400px] aspect-[4/3] lg:aspect-auto lg:h-[clamp(350px,30vh,450px)]">
-                    <h3 className="text-xl font-semibold mb-8">Participation Mode</h3>
-                    <AnalyticsChart data={participationData} title="" color="#ff9500" />
                 </div>
             </div>
         </motion.div>

@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users,
   GraduationCap,
-  IndianRupee,
+  UserCheck,
   Eye,
   Trash2,
   CheckCircle2,
@@ -132,25 +132,22 @@ function VendorMainContent({ initialSection }: VendorViewProps) {
   }, [isCompletedSection, search, mode, college, branch, city, startDate, endDate, statusFilter, examStatusFilter, githubLinkStatus]);
 
   // Financial KPI calculations
-  const { totalAmount, teamAmount, individualAmount, totalCollegesCount } = useMemo(() => {
-    let total = 0;
+  const { teamStudentsCount, individualStudentsCount, totalCollegesCount } = useMemo(() => {
     let team = 0;
     let individual = 0;
     const cols = new Set<string>();
 
     students.forEach(s => {
-      const amt = Number(s.amount) || 399;
-      total += amt;
-      if (s.participation_mode === 'team') team += amt;
-      else individual += amt;
+      const teamSize = 1 + (Array.isArray(s.team_members) ? s.team_members.length : 0);
+      if (s.participation_mode === 'team') team += teamSize;
+      else individual += teamSize;
 
       if (s.college && s.college !== 'N/A') cols.add(s.college);
     });
 
     return {
-      totalAmount: total,
-      teamAmount: team,
-      individualAmount: individual,
+      teamStudentsCount: team,
+      individualStudentsCount: individual,
       totalCollegesCount: cols.size || filterOptions.colleges.length
     };
   }, [students, filterOptions.colleges]);
@@ -250,8 +247,6 @@ function VendorMainContent({ initialSection }: VendorViewProps) {
       'Track': s.hackathon_track || 'General',
       'Task': s.task || 'General',
       'Payment Status': (s.status === 'approved' ? 'COMPLETED' : 'PENDING'),
-      'Amount': s.amount || 399,
-      'Transaction ID': s.transaction_id || 'N/A',
       'Registration Date': s.registration_date ? new Date(s.registration_date).toLocaleString('en-IN') : 'N/A',
       'Reviewed': s.is_reviewed ? 'Yes' : 'No',
       'Reviewed By': s.Reviewedby || '',
@@ -457,35 +452,25 @@ function VendorMainContent({ initialSection }: VendorViewProps) {
           </div>
         </div>
 
-        {/* Row 2: Total Amount, Team Amount, Individual Amount */}
+        {/* Row 2: Team Mode Students & Individual Mode Students */}
         <div className="flex gap-4 relative z-50">
           <div className="flex-1 bg-[#f5f5f7]/30 p-5 rounded-2xl border border-black/5 shadow-sm flex items-center justify-between">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#86868b]">Total Amount</p>
-              <h3 className="text-3xl font-bold text-[#1d1d1f] mt-1">₹{totalAmount.toLocaleString('en-IN')}</h3>
-            </div>
-            <div className="p-3 bg-emerald-500/10 text-emerald-600 rounded-xl">
-              <IndianRupee className="w-6 h-6" />
-            </div>
-          </div>
-
-          <div className="flex-1 bg-[#f5f5f7]/30 p-5 rounded-2xl border border-black/5 shadow-sm flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#86868b]">Team Amount</p>
-              <h3 className="text-3xl font-bold text-[#1d1d1f] mt-1">₹{teamAmount.toLocaleString('en-IN')}</h3>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#86868b]">Team Mode Students</p>
+              <h3 className="text-3xl font-bold text-[#1d1d1f] mt-1">{teamStudentsCount}</h3>
             </div>
             <div className="p-3 bg-blue-500/10 text-blue-600 rounded-xl">
-              <IndianRupee className="w-6 h-6" />
+              <UserCheck className="w-6 h-6" />
             </div>
           </div>
 
           <div className="flex-1 bg-[#f5f5f7]/30 p-5 rounded-2xl border border-black/5 shadow-sm flex items-center justify-between">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#86868b]">Individual Amount</p>
-              <h3 className="text-3xl font-bold text-[#1d1d1f] mt-1">₹{individualAmount.toLocaleString('en-IN')}</h3>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#86868b]">Individual Mode Students</p>
+              <h3 className="text-3xl font-bold text-[#1d1d1f] mt-1">{individualStudentsCount}</h3>
             </div>
             <div className="p-3 bg-orange-500/10 text-orange-600 rounded-xl">
-              <IndianRupee className="w-6 h-6" />
+              <Users className="w-6 h-6" />
             </div>
           </div>
         </div>

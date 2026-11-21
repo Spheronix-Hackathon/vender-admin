@@ -77,7 +77,6 @@ const Sidebar = () => {
         { name: 'Complete Registration Students', icon: UserCheck, path: '/vendor/completed' },
         { name: 'Colleges', icon: GraduationCap, path: '/colleges' },
         { name: 'Categories', icon: Building2, path: '/categories' },
-        { name: 'Payments', icon: CreditCard, path: '/payments' },
         { name: 'Analytics', icon: BarChart3, path: '/analytics' },
     ];
 
@@ -88,6 +87,7 @@ const Sidebar = () => {
     if (isSuperAdmin) {
         // Position Admin Logs prominently right under Dashboard
         menuItems.splice(1, 0, { name: 'Admin Logs', icon: ScrollText, path: '/admin-logs' });
+        menuItems.push({ name: 'Payments', icon: CreditCard, path: '/payments' });
         menuItems.push({ name: 'Settings & 2FA', icon: Settings, path: '/settings' });
     }
 

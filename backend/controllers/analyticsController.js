@@ -46,6 +46,8 @@ exports.getDashboardStats = async (req, res) => {
         let pendingVendorPayments = 0;
         let vendorTeamAmount = 0;
         let vendorIndividualAmount = 0;
+        let vendorTeamStudents = 0;
+        let vendorIndividualStudents = 0;
 
         const vendorRegs = await VendorRegistration.find({}).lean();
         totalVendorStudents = vendorRegs.length;
@@ -67,8 +69,10 @@ exports.getDashboardStats = async (req, res) => {
 
             if (reg.participationMode === 'team') {
                 vendorTeamAmount += amt;
+                vendorTeamStudents += teamSize;
             } else {
                 vendorIndividualAmount += amt;
+                vendorIndividualStudents += teamSize;
             }
         });
 
@@ -84,19 +88,22 @@ exports.getDashboardStats = async (req, res) => {
         const result = {
             totalStudents: totalVendorStudents,
             approvedStudents: approvedVendorStudents,
-            totalIndividualStudents: totalVendorStudents,
-            approvedIndividualStudents: approvedVendorStudents,
-            totalStudentsNotFillData: 0,
-            totalRevenue: vendorRevenue,
+            totalIndividualStudents: vendorIndividualStudents,
+            totalTeamStudents: vendorTeamStudents,
+            totalVendorStudents,
+            approvedVendorStudents,
+            pendingVendorPayments,
+            vendorTeamStudents,
+            vendorIndividualStudents,
+            vendorTeamAmount,
+            vendorIndividualAmount,
+            registeredColleges,
+            successRate,
+            registrationGrowth: '0%',
             studentSectionRevenue: 0,
             individualApprovedRevenue: 0,
             vendorRevenue,
             vendorAmount: vendorRevenue,
-            totalVendorStudents,
-            approvedVendorStudents,
-            pendingVendorPayments,
-            vendorTeamAmount,
-            vendorIndividualAmount,
             officerUploadedRevenue: 0,
             teamRevenue: vendorTeamAmount,
             individualRevenue: vendorIndividualAmount,
@@ -106,10 +113,7 @@ exports.getDashboardStats = async (req, res) => {
             officerUploadedAmount: 0,
             officerUploadedReceipts: 0,
             officerSubmissionsCount: 0,
-            pendingPayments: pendingVendorPayments,
-            successRate,
-            registrationGrowth: '0%',
-            registeredColleges
+            pendingPayments: pendingVendorPayments
         };
 
         cachedDashboardStats = result;
