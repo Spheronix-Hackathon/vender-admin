@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const vendorController = require('../controllers/vendorController');
+const superAdminAuth = require('../middleware/superAdminAuth');
 
 // Aggregate statistics
 router.get('/stats', vendorController.getVendorStats);
@@ -21,8 +22,8 @@ router.get('/categories', vendorController.getVendorCategories);
 router.get('/tasks', vendorController.getVendorTasks);
 
 // Bulk operations
-router.delete('/bulk', vendorController.bulkDeleteVendorRegistrations);
-router.post('/bulk-delete', vendorController.bulkDeleteVendorRegistrations);
+router.delete('/bulk', superAdminAuth, vendorController.bulkDeleteVendorRegistrations);
+router.post('/bulk-delete', superAdminAuth, vendorController.bulkDeleteVendorRegistrations);
 router.post('/update-status', vendorController.updateStudentsStatus);
 router.post('/start-exam', vendorController.startExam);
 
@@ -32,9 +33,9 @@ router.get('/:id', vendorController.getVendorRegistrationById);
 router.put('/:id/complete', vendorController.markAsCompleted);
 router.put('/:id/pending', vendorController.markAsPending);
 router.post('/:id/reset-mfa', vendorController.resetStudentMFA);
-router.put('/:id/details', vendorController.updateStudent);
-router.put('/:id', vendorController.updateStudent);
-router.delete('/:id', vendorController.deleteVendorRegistration);
+router.put('/:id/details', superAdminAuth, vendorController.updateStudent);
+router.put('/:id', superAdminAuth, vendorController.updateStudent);
+router.delete('/:id', superAdminAuth, vendorController.deleteVendorRegistration);
 
 // Get all registrations with search, filters, pagination
 router.get('/', vendorController.getVendorRegistrations);

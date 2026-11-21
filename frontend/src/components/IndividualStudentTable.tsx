@@ -1140,18 +1140,20 @@ const IndividualStudentTable = ({ data, onStatusUpdate, onReAdd, selectedIds = [
                                                 >
                                                     Reset MFA
                                                 </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setStudentToDelete(student);
-                                                    }}
-                                                    className="px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-600 hover:text-white transition-all border border-red-200 text-xs font-bold flex items-center gap-1.5 whitespace-nowrap shadow-sm hover:shadow"
-                                                    title={`Delete ${student.name} permanently from database`}
-                                                >
-                                                    <Trash2 size={13} />
-                                                    Delete
-                                                </button>
+                                                {isSuperAdmin && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setStudentToDelete(student);
+                                                        }}
+                                                        className="px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-600 hover:text-white transition-all border border-red-200 text-xs font-bold flex items-center gap-1.5 whitespace-nowrap shadow-sm hover:shadow"
+                                                        title={`Delete ${student.name} permanently from database (Super Admin Only)`}
+                                                    >
+                                                        <Trash2 size={13} />
+                                                        Delete
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                         <td className="p-5">

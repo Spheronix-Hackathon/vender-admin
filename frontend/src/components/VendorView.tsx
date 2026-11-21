@@ -43,6 +43,19 @@ function VendorMainContent({ initialSection }: VendorViewProps) {
   const [totalStudents, setTotalStudents] = useState(0);
   const [loading, setLoading] = useState(true);
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
+  const [isSuperAdmin] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const token = localStorage.getItem('admin_token');
+    if (token && token.includes('.')) {
+      try {
+        const payload = JSON.parse(window.atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        const email = (payload.email || '').toLowerCase().trim();
+        return ['yashwanthkumar87657@gmail.com', 'dhanushsunny00@gmail.com'].includes(email) ||
+          payload.role === 'superadmin' || payload.role === 'super_admin';
+      } catch (e) {}
+    }
+    return false;
+  });
 
   // Search & Filter States (matching Image 1)
   const [search, setSearch] = useState('');
@@ -700,7 +713,7 @@ function VendorMainContent({ initialSection }: VendorViewProps) {
           </div>
 
           <div className="flex items-center gap-2">
-            {selectedIds.length > 0 && (
+            {isSuperAdmin && selectedIds.length > 0 && (
               <button
                 onClick={handleBulkDelete}
                 className="px-5 py-2 text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 active:bg-red-200 border border-red-200 rounded-2xl transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
