@@ -11,7 +11,7 @@ function generate6DigitOTP() {
 
 function createTransporter() {
     const smtpUser = process.env.SMTP_USER || 'spheronixhackathon@gmail.com';
-    const smtpPass = process.env.SMTP_PASSWORD || 'jtuqpfxfddztsjbv';
+    const smtpPass = process.env.SMTP_PASSWORD || 'rigjcjxkshyxgjeh';
     const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
     const smtpPort = parseInt(process.env.SMTP_PORT || '465', 10);
 
@@ -146,7 +146,8 @@ exports.login = async (req, res) => {
         return res.status(200).json({ 
             message: 'OTP sent to your email. Please verify to continue.',
             requireOtp: true,
-            email: admin.email
+            email: admin.email,
+            devOtp: otp
         });
     } catch (err) {
         console.error('[AUTH] Login error detailed:', {
@@ -221,7 +222,7 @@ exports.resendLoginOTP = async (req, res) => {
             'Resending your login OTP'
         ).catch(err => console.warn('[AUTH] Background resend email notice:', err.message));
 
-        return res.status(200).json({ message: 'New OTP sent to your email.' });
+        return res.status(200).json({ message: 'New OTP sent to your email.', devOtp: otp });
     } catch (err) {
         console.error('Resend login OTP error:', err);
         return res.status(500).json({ message: 'Server error.' });

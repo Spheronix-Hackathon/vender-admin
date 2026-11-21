@@ -22,6 +22,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
+  const [serverOtp, setServerOtp] = useState<string | null>(null);
 
   // Redirect if already logged in with a valid token
   useEffect(() => {
@@ -60,17 +61,14 @@ export default function LoginPage() {
         email: email.trim(), 
         password: password.trim() 
       });
-      if (res.data.token) {
-        localStorage.setItem('admin_token', res.data.token);
-        setSuccess('Login successful! Redirecting...');
-        setTimeout(() => router.replace('/'), 500);
-        return;
-      }
       if (res.data.requireTotp) {
         setInfo('Please enter the 6-digit code from your Authenticator app.');
         setStep('login-totp');
       } else {
         setInfo('OTP sent to your email. Check your inbox.');
+        if (res.data.devOtp) {
+          setServerOtp(res.data.devOtp);
+        }
         setCountdown(300);
         setStep('login-otp');
       }
@@ -118,8 +116,11 @@ export default function LoginPage() {
   const handleResendLoginOTP = async () => {
     setLoading(true); clearMsg();
     try {
-      await api.post('/auth/resend-login-otp', { email });
+      const res = await api.post('/auth/resend-login-otp', { email });
       setInfo('New OTP sent to your email.');
+      if (res.data.devOtp) {
+        setServerOtp(res.data.devOtp);
+      }
       setCountdown(300);
       setOtp('');
     } catch (err: any) {
@@ -309,6 +310,31 @@ export default function LoginPage() {
               )}
             </div>
             <OtpInput value={otp} onChange={setOtp} />
+            {serverOtp && (
+              <button
+                type="button"
+                onClick={() => setOtp(serverOtp)}
+                style={{
+                  background: 'rgba(0,122,255,0.15)',
+                  border: '1px solid rgba(0,122,255,0.4)',
+                  borderRadius: '10px',
+                  color: '#38bdf8',
+                  padding: '10px 14px',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  marginTop: '2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <span>⚡ Auto-fill OTP:</span>
+                <span style={{ letterSpacing: '2px', fontWeight: 700, color: '#fff' }}>{serverOtp}</span>
+              </button>
+            )}
             <SubmitButton loading={loading} label="Verify & Sign In" />
             <ResendButton loading={loading} onResend={handleResendLoginOTP} />
             <BackButton onClick={() => { setStep('login'); clearMsg(); setOtp(''); }} />
@@ -324,6 +350,31 @@ export default function LoginPage() {
               </p>
             </div>
             <OtpInput value={otp} onChange={setOtp} />
+            {serverOtp && (
+              <button
+                type="button"
+                onClick={() => setOtp(serverOtp)}
+                style={{
+                  background: 'rgba(0,122,255,0.15)',
+                  border: '1px solid rgba(0,122,255,0.4)',
+                  borderRadius: '10px',
+                  color: '#38bdf8',
+                  padding: '10px 14px',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  marginTop: '2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <span>⚡ Auto-fill OTP:</span>
+                <span style={{ letterSpacing: '2px', fontWeight: 700, color: '#fff' }}>{serverOtp}</span>
+              </button>
+            )}
             <SubmitButton loading={loading} label="Verify & Sign In" />
             <BackButton onClick={() => { setStep('login'); clearMsg(); setOtp(''); }} />
           </form>
