@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import api from '@/lib/api';
-import { LayoutDashboard, GraduationCap, Building2, CreditCard, BarChart3, LogOut, UserCheck, Pencil, X, Check, ScrollText, Clock, Settings } from 'lucide-react';
+import { LayoutDashboard, GraduationCap, Building2, BarChart3, LogOut, UserCheck, Pencil, X, Check, ScrollText, Clock, Settings } from 'lucide-react';
 
 
 const Sidebar = () => {
@@ -87,7 +87,6 @@ const Sidebar = () => {
     if (isSuperAdmin) {
         // Position Admin Logs prominently right under Dashboard
         menuItems.splice(1, 0, { name: 'Admin Logs', icon: ScrollText, path: '/admin-logs' });
-        menuItems.push({ name: 'Payments', icon: CreditCard, path: '/payments' });
         menuItems.push({ name: 'Settings & 2FA', icon: Settings, path: '/settings' });
     }
 
