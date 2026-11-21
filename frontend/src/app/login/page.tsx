@@ -2,12 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import axios from 'axios';
-
 import api from '@/lib/api';
+import { ShieldCheck, QrCode, Key, Copy, Check, ArrowLeft, Mail, AlertTriangle } from 'lucide-react';
 
 // ─── Step Types ───────────────────────────────────────────────────────────────
-type Step = 'login' | 'login-otp' | 'login-totp' | 'forgot-email' | 'forgot-otp' | 'reset-password';
+type Step = 'login' | 'setup-2fa' | 'login-2fa' | 'forgot-2fa';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,11 +15,11 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [qrCode, setQrCode] = useState('');
+  const [secretKey, setSecretKey] = useState('');
+  const [copiedKey, setCopiedKey] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'error' | 'success' | 'info' } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [countdown, setCountdown] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
 
   // Redirect if already logged in with a valid token
@@ -38,13 +37,6 @@ export default function LoginPage() {
     checkExistingSession();
   }, [router]);
 
-  // Countdown timer for OTP expiry
-  useEffect(() => {
-    if (countdown <= 0) return;
-    const t = setInterval(() => setCountdown(c => c - 1), 1000);
-    return () => clearInterval(t);
-  }, [countdown]);
-
   const setInfo = (text: string) => setMessage({ text, type: 'info' });
   const setError = (text: string) => setMessage({ text, type: 'error' });
   const setSuccess = (text: string) => setMessage({ text, type: 'success' });
@@ -52,25 +44,37 @@ export default function LoginPage() {
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
+  // Step 1: Submit Email & Password
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true); clearMsg();
+    setLoading(true);
+    clearMsg();
+
     try {
+      const cleanEmail = email.trim().toLowerCase();
       const res = await api.post('/auth/login', { 
-        email: email.trim(), 
+        email: cleanEmail, 
         password: password.trim() 
       });
-      if (res.data.requireTotp) {
-        setInfo('Please enter the 6-digit code from your Authenticator app.');
-        setStep('login-totp');
+
+      if (res.data.status === 'SETUP_2FA') {
+        // First-time 2FA registration or after Super Admin reset
+        setQrCode(res.data.qrCode);
+        setSecretKey(res.data.secretKey);
+        setOtp('');
+        setStep('setup-2fa');
+        setInfo('Scan the QR code with Google Authenticator or Microsoft Authenticator, then enter the 6-digit code.');
+      } else if (res.data.status === 'REQUIRE_2FA') {
+        // Returning admin with 2FA already configured
+        setOtp('');
+        setStep('login-2fa');
+        setInfo('Enter the 6-digit code from your Authenticator app.');
       } else {
-        setInfo('OTP sent to your email. Check your inbox.');
-        setCountdown(300);
-        setStep('login-otp');
+        setError('Unexpected authentication response. Please try again.');
       }
     } catch (err: any) {
       if (!err.response) {
-        setError('Cannot connect to backend server. Please make sure the backend is running on port 5050.');
+        setError('Cannot connect to backend server. Please verify the backend is online.');
       } else {
         setError(err.response?.data?.message || 'Login failed.');
       }
@@ -79,120 +83,64 @@ export default function LoginPage() {
     }
   };
 
-  const handleVerifyTOTP = async (e: React.FormEvent) => {
+  // Step 2A: Confirm First-Time 2FA Setup
+  const handleConfirmSetup = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true); clearMsg();
-    try {
-      const res = await api.post('/auth/verify-totp', { email, token: otp });
-      localStorage.setItem('admin_token', res.data.token);
-      setSuccess('Login successful! Redirecting...');
-      setTimeout(() => router.replace('/'), 800);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Invalid Authenticator code.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyLoginOTP = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true); clearMsg();
-    try {
-      const res = await api.post('/auth/verify-login-otp', { email, otp });
-      localStorage.setItem('admin_token', res.data.token);
-      setSuccess('Login successful! Redirecting...');
-      setTimeout(() => router.replace('/'), 800);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Invalid OTP.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResendLoginOTP = async () => {
-    setLoading(true); clearMsg();
-    try {
-      await api.post('/auth/resend-login-otp', { email });
-      setInfo('New OTP sent to your email.');
-      setCountdown(300);
-      setOtp('');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to resend OTP.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleForgotEmail = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true); clearMsg();
-    try {
-      await api.post('/auth/forgot-password', { email });
-      setInfo('Password reset OTP sent to your email.');
-      setCountdown(300);
-      setStep('forgot-otp');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to send OTP.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyResetOTP = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true); clearMsg();
-    try {
-      await api.post('/auth/verify-reset-otp', { email, otp });
-      setInfo('OTP verified! Set your new password.');
-      setStep('reset-password');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Invalid OTP.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResendResetOTP = async () => {
-    setLoading(true); clearMsg();
-    try {
-      await api.post('/auth/forgot-password', { email });
-      setInfo('New OTP sent to your email.');
-      setCountdown(300);
-      setOtp('');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to resend OTP.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newPassword !== confirmPassword) {
-      setError('Passwords do not match.');
+    if (otp.length !== 6) {
+      setError('Please enter the full 6-digit code from your Authenticator app.');
       return;
     }
-    setLoading(true); clearMsg();
+    setLoading(true);
+    clearMsg();
+
     try {
-      await api.post('/auth/reset-password', { email, newPassword, confirmPassword });
-      setSuccess('Password reset successfully! You can now log in with your new password.');
-      setTimeout(() => {
-        setStep('login');
-        setPassword('');
-        setNewPassword('');
-        setConfirmPassword('');
-        clearMsg();
-      }, 2500);
+      const res = await api.post('/auth/confirm-2fa-setup', { 
+        email: email.trim().toLowerCase(), 
+        token: otp.trim() 
+      });
+      localStorage.setItem('admin_token', res.data.token);
+      setSuccess('Two-factor authentication configured successfully! Redirecting...');
+      setTimeout(() => router.replace('/'), 700);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to reset password.');
+      setError(err.response?.data?.message || 'Invalid 6-digit code. Please verify your phone clock and try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const formatCountdown = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  // Step 2B: Verify Returning 2FA Login
+  const handleVerify2FA = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (otp.length !== 6) {
+      setError('Please enter the 6-digit code from your Authenticator app.');
+      return;
+    }
+    setLoading(true);
+    clearMsg();
 
-  // ─── Render ────────────────────────────────────────────────────────────────
+    try {
+      const res = await api.post('/auth/verify-2fa', { 
+        email: email.trim().toLowerCase(), 
+        token: otp.trim() 
+      });
+      localStorage.setItem('admin_token', res.data.token);
+      setSuccess('Verification successful! Redirecting...');
+      setTimeout(() => router.replace('/'), 700);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Invalid Authenticator code. Please check your app and try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Helper: Copy Base32 Secret Key
+  const handleCopyKey = () => {
+    if (!secretKey) return;
+    navigator.clipboard.writeText(secretKey);
+    setCopiedKey(true);
+    setTimeout(() => setCopiedKey(false), 2000);
+  };
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -219,45 +167,50 @@ export default function LoginPage() {
         filter: 'blur(40px)', pointerEvents: 'none'
       }} />
 
-      {/* Card */}
+      {/* Main Glass Card */}
       <div style={{
-        width: '100%', maxWidth: '440px',
+        width: '100%', maxWidth: '460px',
         background: 'rgba(255,255,255,0.04)',
         border: '1px solid rgba(255,255,255,0.09)',
         borderRadius: '24px',
-        padding: '48px 44px',
+        padding: '40px 36px',
         backdropFilter: 'blur(40px)',
         boxShadow: '0 40px 80px rgba(0,0,0,0.5)',
         position: 'relative',
         zIndex: 10,
       }}>
-        {/* Logo / Brand */}
-        <div style={{ textAlign: 'center', marginBottom: '36px' }}>
+        {/* Logo / Brand Header */}
+        <div style={{ textAlign: 'center', marginBottom: '28px' }}>
           <div style={{
             width: '56px', height: '56px', borderRadius: '16px',
             background: 'linear-gradient(135deg, #007aff 0%, #5856d6 100%)',
-            margin: '0 auto 16px',
+            margin: '0 auto 14px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             boxShadow: '0 8px 24px rgba(0,122,255,0.4)',
             fontSize: '22px',
-          }}>⚡</div>
-          <h1 style={{ color: '#fff', fontSize: '26px', fontWeight: '700', margin: '0 0 6px', letterSpacing: '-0.5px' }}>
-            Spheronix Admin
+          }}>
+            {step === 'setup-2fa' ? <QrCode size={26} color="#fff" /> : 
+             step === 'login-2fa' ? <ShieldCheck size={28} color="#fff" /> : 
+             step === 'forgot-2fa' ? <AlertTriangle size={26} color="#fff" /> : '⚡'}
+          </div>
+          <h1 style={{ color: '#fff', fontSize: '24px', fontWeight: '700', margin: '0 0 6px', letterSpacing: '-0.5px' }}>
+            {step === 'login' && 'Spheronix Admin'}
+            {step === 'setup-2fa' && 'Set Up 2FA Authenticator'}
+            {step === 'login-2fa' && 'Two-Factor Authentication'}
+            {step === 'forgot-2fa' && '2FA Reset Assistance'}
           </h1>
-          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px', margin: 0 }}>
-            {step === 'login' && 'Enter your credentials to continue'}
-            {step === 'login-otp' && 'Two-factor authentication (Email)'}
-            {step === 'login-totp' && 'Two-factor authentication (App)'}
-            {step === 'forgot-email' && 'Reset your password'}
-            {step === 'forgot-otp' && 'Enter your reset OTP'}
-            {step === 'reset-password' && 'Set your new password'}
+          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px', margin: 0 }}>
+            {step === 'login' && 'Enter your admin email and password to continue'}
+            {step === 'setup-2fa' && 'First-time registration: Scan the QR code with your phone'}
+            {step === 'login-2fa' && `Enter the 6-digit code for ${email}`}
+            {step === 'forgot-2fa' && 'Lost your device? Contact Super Admin for a reset'}
           </p>
         </div>
 
-        {/* Message Banner */}
+        {/* Status / Message Banner */}
         {message && (
           <div style={{
-            padding: '12px 16px', borderRadius: '12px', marginBottom: '24px',
+            padding: '12px 16px', borderRadius: '12px', marginBottom: '20px',
             fontSize: '13px', fontWeight: '500', lineHeight: '1.4',
             background: message.type === 'error' ? 'rgba(255,59,48,0.12)' :
                         message.type === 'success' ? 'rgba(52,199,89,0.12)' : 'rgba(0,122,255,0.12)',
@@ -268,97 +221,214 @@ export default function LoginPage() {
           }}>{message.text}</div>
         )}
 
-        {/* ── STEP: Login ── */}
+        {/* ── STEP 1: Email & Password Login ── */}
         {step === 'login' && (
           <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <InputField label="Email" type="email" value={email} onChange={setEmail} placeholder="admin@example.com" autoFocus />
+            <InputField label="Admin Email" type="email" value={email} onChange={setEmail} placeholder="admin@example.com" autoFocus />
             <div style={{ position: 'relative' }}>
               <InputField label="Password" type={showPassword ? 'text' : 'password'} value={password} onChange={setPassword} placeholder="••••••••••" />
-              <button type="button" onClick={() => setShowPassword(v => !v)}
-                style={{ position: 'absolute', right: '14px', top: '36px', background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.4)', fontSize: '12px', padding: '0' }}>
+              <button 
+                type="button" 
+                onClick={() => setShowPassword(v => !v)}
+                style={{ 
+                  position: 'absolute', right: '14px', top: '36px', 
+                  background: 'none', border: 'none', cursor: 'pointer', 
+                  color: 'rgba(255,255,255,0.4)', fontSize: '11px', fontWeight: '700', padding: '0' 
+                }}>
                 {showPassword ? 'HIDE' : 'SHOW'}
               </button>
             </div>
             <SubmitButton loading={loading} label="Continue" />
-            <button type="button" onClick={() => { setStep('forgot-email'); clearMsg(); }}
-              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '13px', cursor: 'pointer', textAlign: 'center', marginTop: '4px', transition: 'color 0.2s' }}
-              onMouseEnter={e => (e.currentTarget.style.color = '#007aff')}
-              onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.4)')}>
-              Forgot password?
-            </button>
           </form>
         )}
 
-        {/* ── STEP: Login OTP (2FA) ── */}
-        {step === 'login-otp' && (
-          <form onSubmit={handleVerifyLoginOTP} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ textAlign: 'center', marginBottom: '4px' }}>
-              <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px', margin: '0' }}>
-                OTP sent to <strong style={{ color: 'rgba(255,255,255,0.8)' }}>{email}</strong>
-              </p>
-              {countdown > 0 && (
-                <p style={{ color: countdown < 60 ? '#ff6b6b' : 'rgba(255,255,255,0.35)', fontSize: '12px', marginTop: '6px' }}>
-                  Expires in {formatCountdown(countdown)}
-                </p>
+        {/* ── STEP 2A: First-Time 2FA Setup (QR Code Display) ── */}
+        {step === 'setup-2fa' && (
+          <form onSubmit={handleConfirmSetup} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            {/* QR Code Container */}
+            <div style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 8px 30px rgba(0,0,0,0.3)',
+              margin: '0 auto',
+              width: 'fit-content'
+            }}>
+              {qrCode ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img 
+                  src={qrCode} 
+                  alt="2FA QR Code" 
+                  style={{ width: '190px', height: '190px', display: 'block', borderRadius: '8px' }} 
+                />
+              ) : (
+                <div style={{ width: '190px', height: '190px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>
+                  Loading QR Code...
+                </div>
               )}
             </div>
-            <OtpInput value={otp} onChange={setOtp} />
-            <SubmitButton loading={loading} label="Verify & Sign In" />
-            <ResendButton loading={loading} onResend={handleResendLoginOTP} />
+
+            {/* Manual Secret Key Helper */}
+            {secretKey && (
+              <div style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '12px',
+                padding: '10px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '8px'
+              }}>
+                <div style={{ overflow: 'hidden' }}>
+                  <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: '700', letterSpacing: '0.5px' }}>
+                    Manual Setup Key
+                  </div>
+                  <div style={{ fontFamily: 'monospace', fontSize: '12px', color: '#6eb9ff', letterSpacing: '1.5px', wordBreak: 'break-all' }}>
+                    {secretKey}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopyKey}
+                  title="Copy Key"
+                  style={{
+                    background: copiedKey ? 'rgba(52,199,89,0.2)' : 'rgba(255,255,255,0.08)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '6px 10px',
+                    color: copiedKey ? '#30d158' : '#fff',
+                    fontSize: '11px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.2s',
+                    flexShrink: 0
+                  }}
+                >
+                  {copiedKey ? <Check size={12} /> : <Copy size={12} />}
+                  {copiedKey ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+            )}
+
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', margin: '0 0 10px' }}>
+                Enter the 6-digit code shown in your Authenticator app:
+              </p>
+              <OtpInput value={otp} onChange={setOtp} />
+            </div>
+
+            <SubmitButton loading={loading} label="Confirm & Activate 2FA" />
             <BackButton onClick={() => { setStep('login'); clearMsg(); setOtp(''); }} />
           </form>
         )}
 
-        {/* ── STEP: Login TOTP (App 2FA) ── */}
-        {step === 'login-totp' && (
-          <form onSubmit={handleVerifyTOTP} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ textAlign: 'center', marginBottom: '4px' }}>
-              <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px', margin: '0' }}>
-                Enter the code from your Authenticator app
+        {/* ── STEP 2B: Returning 2FA Login ── */}
+        {step === 'login-2fa' && (
+          <form onSubmit={handleVerify2FA} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', margin: '0 0 12px' }}>
+                Open <strong>Google Authenticator</strong> or <strong>Microsoft Authenticator</strong> on your phone and enter your 6-digit code:
+              </p>
+              <OtpInput value={otp} onChange={setOtp} />
+            </div>
+
+            <SubmitButton loading={loading} label="Verify & Sign In" />
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center', marginTop: '6px' }}>
+              <button
+                type="button"
+                onClick={() => { setStep('forgot-2fa'); clearMsg(); }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'rgba(255,255,255,0.45)',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  transition: 'color 0.2s',
+                  padding: '4px 8px'
+                }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#6eb9ff')}
+                onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
+              >
+                Lost your phone / Authenticator? Contact Super Admin →
+              </button>
+              <BackButton onClick={() => { setStep('login'); clearMsg(); setOtp(''); }} />
+            </div>
+          </form>
+        )}
+
+        {/* ── STEP 3: Forgot 2FA / Device Lost Assistance ── */}
+        {step === 'forgot-2fa' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <div style={{
+              background: 'rgba(255,149,0,0.08)',
+              border: '1px solid rgba(255,149,0,0.25)',
+              borderRadius: '16px',
+              padding: '18px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Key size={18} color="#ff9f0a" />
+                <span style={{ fontSize: '13px', fontWeight: '700', color: '#ff9f0a', letterSpacing: '0.3px' }}>
+                  2FA RESET PROCEDURE
+                </span>
+              </div>
+              <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '13px', margin: 0, lineHeight: '1.5' }}>
+                For high security, junior admin 2FA keys can only be reset by the Super Admin. Once reset, you will automatically be presented with a new QR code upon your next login.
               </p>
             </div>
-            <OtpInput value={otp} onChange={setOtp} />
-            <SubmitButton loading={loading} label="Verify & Sign In" />
-            <BackButton onClick={() => { setStep('login'); clearMsg(); setOtp(''); }} />
-          </form>
-        )}
 
-        {/* ── STEP: Forgot Password – Enter Email ── */}
-        {step === 'forgot-email' && (
-          <form onSubmit={handleForgotEmail} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <InputField label="Admin Email" type="email" value={email} onChange={setEmail} placeholder="admin@example.com" autoFocus />
-            <SubmitButton loading={loading} label="Send Reset OTP" />
+            <div style={{
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: '16px',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px'
+            }}>
+              <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: '700', letterSpacing: '0.5px' }}>
+                Super Admin Email
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                <span style={{ color: '#fff', fontSize: '14px', fontWeight: '600', fontFamily: 'monospace' }}>
+                  yashwanthkumar87657@gmail.com
+                </span>
+                <a
+                  href={`mailto:yashwanthkumar87657@gmail.com?subject=Spheronix%20Admin%202FA%20Reset%20Request&body=Hi%20Super%20Admin,%0D%0A%0D%0APlease%20reset%202FA%20for%20my%20account:%20${encodeURIComponent(email || 'my-admin-email@example.com')}.%0D%0AI%20have%20lost%20access%20to%20my%20Authenticator%20app.`}
+                  style={{
+                    background: 'rgba(0,122,255,0.2)',
+                    border: '1px solid rgba(0,122,255,0.4)',
+                    color: '#6eb9ff',
+                    borderRadius: '8px',
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    textDecoration: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    cursor: 'pointer',
+                    flexShrink: 0
+                  }}
+                >
+                  <Mail size={13} /> Email
+                </a>
+              </div>
+            </div>
+
             <BackButton onClick={() => { setStep('login'); clearMsg(); }} />
-          </form>
-        )}
-
-        {/* ── STEP: Forgot Password – Verify OTP ── */}
-        {step === 'forgot-otp' && (
-          <form onSubmit={handleVerifyResetOTP} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ textAlign: 'center', marginBottom: '4px' }}>
-              <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px', margin: '0' }}>
-                OTP sent to <strong style={{ color: 'rgba(255,255,255,0.8)' }}>{email}</strong>
-              </p>
-              {countdown > 0 && (
-                <p style={{ color: countdown < 60 ? '#ff6b6b' : 'rgba(255,255,255,0.35)', fontSize: '12px', marginTop: '6px' }}>
-                  Expires in {formatCountdown(countdown)}
-                </p>
-              )}
-            </div>
-            <OtpInput value={otp} onChange={setOtp} />
-            <SubmitButton loading={loading} label="Verify OTP" />
-            <ResendButton loading={loading} onResend={handleResendResetOTP} />
-            <BackButton onClick={() => { setStep('forgot-email'); clearMsg(); setOtp(''); }} />
-          </form>
-        )}
-
-        {/* ── STEP: Reset Password ── */}
-        {step === 'reset-password' && (
-          <form onSubmit={handleResetPassword} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <InputField label="New Password" type="password" value={newPassword} onChange={setNewPassword} placeholder="Minimum 8 characters" autoFocus />
-            <InputField label="Confirm Password" type="password" value={confirmPassword} onChange={setConfirmPassword} placeholder="Re-enter password" />
-            <SubmitButton loading={loading} label="Reset Password" />
-          </form>
+          </div>
         )}
       </div>
     </div>
@@ -406,35 +476,35 @@ function InputField({
 
 function OtpInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      <label style={{ color: 'rgba(255,255,255,0.5)', fontSize: '12px', fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-        One-Time Password
-      </label>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
       <input
         type="text"
+        inputMode="numeric"
+        autoComplete="one-time-code"
         value={value}
         onChange={e => onChange(e.target.value.replace(/\D/g, '').slice(0, 6))}
-        placeholder="6-digit OTP"
+        placeholder="••••••"
         required
         maxLength={6}
         autoFocus
         style={{
-          background: 'rgba(255,255,255,0.06)',
-          border: '1px solid rgba(255,255,255,0.1)',
-          borderRadius: '12px',
+          background: 'rgba(255,255,255,0.08)',
+          border: '2px solid rgba(0,122,255,0.5)',
+          borderRadius: '14px',
           padding: '14px 16px',
           color: '#fff',
-          fontSize: '24px',
+          fontSize: '26px',
           fontFamily: 'monospace',
-          letterSpacing: '10px',
+          letterSpacing: '12px',
           textAlign: 'center',
           outline: 'none',
-          width: '100%',
+          width: '240px',
           boxSizing: 'border-box',
+          boxShadow: '0 4px 20px rgba(0,122,255,0.25)',
           transition: 'border-color 0.2s, background 0.2s',
         }}
-        onFocus={e => { e.target.style.borderColor = 'rgba(0,122,255,0.6)'; e.target.style.background = 'rgba(255,255,255,0.08)'; }}
-        onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.1)'; e.target.style.background = 'rgba(255,255,255,0.06)'; }}
+        onFocus={e => { e.target.style.borderColor = 'rgba(0,122,255,0.9)'; e.target.style.background = 'rgba(255,255,255,0.12)'; }}
+        onBlur={e => { e.target.style.borderColor = 'rgba(0,122,255,0.5)'; e.target.style.background = 'rgba(255,255,255,0.08)'; }}
       />
     </div>
   );
@@ -474,32 +544,6 @@ function SubmitButton({ loading, label }: { loading: boolean; label: string }) {
   );
 }
 
-function ResendButton({ loading, onResend }: { loading: boolean; onResend: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onResend}
-      disabled={loading}
-      style={{
-        background: 'rgba(255,255,255,0.05)',
-        border: '1px solid rgba(255,255,255,0.1)',
-        borderRadius: '12px',
-        padding: '12px',
-        color: 'rgba(255,255,255,0.6)',
-        fontSize: '13px',
-        fontWeight: '500',
-        cursor: loading ? 'not-allowed' : 'pointer',
-        transition: 'all 0.2s',
-        width: '100%',
-      }}
-      onMouseEnter={e => { if (!loading) { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#fff'; }}}
-      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'rgba(255,255,255,0.6)'; }}
-    >
-      🔁 Resend OTP
-    </button>
-  );
-}
-
 function BackButton({ onClick }: { onClick: () => void }) {
   return (
     <button
@@ -507,13 +551,15 @@ function BackButton({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       style={{
         background: 'none', border: 'none',
-        color: 'rgba(255,255,255,0.35)', fontSize: '13px',
+        color: 'rgba(255,255,255,0.4)', fontSize: '13px',
         cursor: 'pointer', textAlign: 'center', transition: 'color 0.2s',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+        marginTop: '6px'
       }}
       onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
-      onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.35)')}
+      onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.4)')}
     >
-      ← Back
+      <ArrowLeft size={14} /> Back to Login
     </button>
   );
 }

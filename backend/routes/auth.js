@@ -2,42 +2,37 @@ const express = require('express');
 const router = express.Router();
 const {
     login,
-    verifyLoginOTP,
-    resendLoginOTP,
+    confirm2FASetup,
+    verify2FALogin,
+    getAdminsList,
+    resetAdmin2FA,
     forgotPassword,
     verifyResetOTP,
     resetPassword,
 } = require('../controllers/authController');
-const {
-    setupTOTP,
-    verifyTOTPSetup,
-    disableTOTP,
-    loginWithTOTP
-} = require('../controllers/totpController');
 const { loginLimiter, otpLimiter } = require('../utils/rateLimiter');
 const { verifyToken } = require('../middleware/authMiddleware');
+const superAdminAuth = require('../middleware/superAdminAuth');
 const Admin = require('../models/Admin');
 
-
-// Login flow (2FA - Email)
+// Core Authentication & 2FA
 router.post('/login', loginLimiter, login);
-router.post('/verify-login-otp', otpLimiter, verifyLoginOTP);
-router.post('/resend-login-otp', otpLimiter, resendLoginOTP);
+router.post('/confirm-2fa-setup', otpLimiter, confirm2FASetup);
+router.post('/verify-2fa', otpLimiter, verify2FALogin);
 
-// Login flow (2FA - TOTP)
-router.post('/verify-totp', otpLimiter, loginWithTOTP);
+// Backward-compatible alias for frontend
+router.post('/verify-totp', otpLimiter, verify2FALogin);
 
-// TOTP Setup and Management (Requires Authentication)
-router.post('/setup-totp', verifyToken, setupTOTP);
-router.post('/verify-totp-setup', verifyToken, verifyTOTPSetup);
-router.post('/disable-totp', verifyToken, disableTOTP);
+// Super Admin 2FA Management (Requires Super Admin access)
+router.get('/admins', verifyToken, superAdminAuth, getAdminsList);
+router.post('/admin/reset-2fa', verifyToken, superAdminAuth, resetAdmin2FA);
 
-// Forgot password flow
+// Password recovery endpoint
 router.post('/forgot-password', loginLimiter, forgotPassword);
 router.post('/verify-reset-otp', otpLimiter, verifyResetOTP);
 router.post('/reset-password', loginLimiter, resetPassword);
 
-// Verify Token Endpoint (for frontend check)
+// Verify Token Endpoint
 router.get('/me', verifyToken, (req, res) => {
     res.json({ 
         user: {
@@ -54,7 +49,6 @@ router.put('/profile', verifyToken, async (req, res) => {
     try {
         const { username } = req.body;
         
-        // Find and update the admin
         const updatedAdmin = await Admin.findByIdAndUpdate(
             req.admin.id,
             { $set: { username: username || null } },
@@ -85,6 +79,3 @@ router.put('/profile', verifyToken, async (req, res) => {
 });
 
 module.exports = router;
-
-
-

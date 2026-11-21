@@ -1,122 +1,16 @@
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
+const speakeasy = require('speakeasy');
+const QRCode = require('qrcode');
 const Admin = require('../models/Admin');
 const { logAdminAction } = require('../utils/logger');
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function generate6DigitOTP() {
-    return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
-function createTransporter() {
-    const smtpUser = process.env.SMTP_USER || 'spheronixhackathon@gmail.com';
-    const smtpPass = process.env.SMTP_PASSWORD || 'rigjcjxkshyxgjeh';
-    const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-    const smtpPort = parseInt(process.env.SMTP_PORT || '465', 10);
-
-    return nodemailer.createTransport({
-        host: smtpHost,
-        port: smtpPort,
-        secure: smtpPort === 465,
-        auth: {
-            user: smtpUser,
-            pass: smtpPass
-        },
-        connectionTimeout: 10000,
-        greetingTimeout: 5000,
-        socketTimeout: 15000
-    });
-}
-
-async function sendOTPEmail(toEmail, otp, subject, context) {
-    // Print OTP prominently to console/logs so admin can see and use it immediately
-    console.log(`\n======================================================`);
-    console.log(`  [AUTH OTP] Email: ${toEmail} | Code: >>> ${otp} <<<`);
-    console.log(`======================================================\n`);
-
-    const fromAddress = process.env.MAIL_FROM || process.env.SMTP_USER || 'spheronixhackathon@gmail.com';
-    const html = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #f9f9fb; border-radius: 16px;">
-      <div style="text-align: center; margin-bottom: 24px;">
-        <h1 style="color: #1d1d1f; font-size: 24px; margin: 0;">Spheronix Admin</h1>
-        <p style="color: #86868b; margin: 8px 0 0;">${context}</p>
-      </div>
-      <div style="background: #fff; border-radius: 12px; padding: 32px; text-align: center; box-shadow: 0 2px 12px rgba(0,0,0,0.06);">
-        <p style="color: #1d1d1f; font-size: 14px; margin: 0 0 20px;">Your one-time password is:</p>
-        <div style="background: #f5f5f7; border-radius: 10px; padding: 20px; letter-spacing: 12px; font-size: 36px; font-weight: 700; color: #007aff; font-family: monospace;">
-          ${otp}
-        </div>
-        <p style="color: #86868b; font-size: 12px; margin: 20px 0 0;">This OTP expires in <strong>5 minutes</strong>. Do not share it with anyone.</p>
-      </div>
-      <p style="text-align: center; color: #86868b; font-size: 11px; margin-top: 20px;">If you did not request this, please ignore this email.</p>
-    </div>`;
-
-    // 1. Try Resend HTTPS API (Port 443 - never blocked by Render)
-    if (process.env.RESEND_API_KEY) {
-        try {
-            console.log(`[AUTH] Sending OTP via Resend HTTPS API (Port 443)...`);
-            const axios = require('axios');
-            const resendRes = await axios.post('https://api.resend.com/emails', {
-                from: process.env.RESEND_FROM || 'Spheronix Admin <onboarding@resend.dev>',
-                to: [toEmail],
-                subject: subject,
-                html: html
-            }, {
-                headers: {
-                    'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-                    'Content-Type': 'application/json'
-                },
-                timeout: 8000
-            });
-            console.log(`[AUTH] ✓ Email delivered via Resend API:`, resendRes.data?.id);
-            return true;
-        } catch (resendErr) {
-            console.error(`[AUTH] Resend API error:`, resendErr.response?.data || resendErr.message);
-        }
-    }
-
-    // 2. Try Webhook (Port 443 - never blocked by Render)
-    if (process.env.GMAIL_WEBHOOK_URL) {
-        try {
-            console.log(`[AUTH] Sending OTP via Gmail Webhook (Port 443)...`);
-            const axios = require('axios');
-            const whRes = await axios.post(process.env.GMAIL_WEBHOOK_URL, {
-                to: toEmail,
-                subject: subject,
-                html: html
-            }, { timeout: 8000 });
-            console.log(`[AUTH] ✓ Email delivered via Gmail Webhook:`, whRes.data);
-            return true;
-        } catch (whErr) {
-            console.error(`[AUTH] Gmail Webhook error:`, whErr.message);
-        }
-    }
-
-    // 3. Nodemailer SMTP (Port 465 / 587)
-    try {
-        console.log(`[AUTH] Attempting Nodemailer SMTP...`);
-        const transporter = createTransporter();
-        const info = await transporter.sendMail({
-            from: `"Spheronix Admin" <${fromAddress}>`,
-            to: toEmail,
-            subject,
-            html,
-        });
-        console.log(`[AUTH] OTP email sent successfully to ${toEmail}: ${info.response || 'OK'}`);
-        return true;
-    } catch (error) {
-        console.error(`[AUTH] SMTP delivery error:`, error.message);
-        return false;
-    }
-}
-
-// ─── Step 1: Login (verify credentials, send login OTP) ──────────────────────
+// ─── Step 1: Login with Email & Password ──────────────────────────────────────
 exports.login = async (req, res) => {
     try {
         let { email, password } = req.body;
-        if (!email || !password)
+        if (!email || !password) {
             return res.status(400).json({ message: 'Email and password are required.' });
+        }
 
         email = email.trim().toLowerCase();
         password = password.trim();
@@ -144,7 +38,8 @@ exports.login = async (req, res) => {
                 admin = new Admin({
                     email,
                     password: 'Spheronix@123$',
-                    role
+                    role,
+                    isTotpEnabled: false
                 });
                 await admin.save();
                 console.log(`[AUTH] Successfully auto-created admin: ${email} (${role})`);
@@ -159,206 +54,208 @@ exports.login = async (req, res) => {
         console.log(`[AUTH] Password comparison result: ${isMatch}`);
         
         if (!isMatch) {
-            console.log(`[AUTH] Login failed: Password mismatch for ${email}. Supplied: ${password.charAt(0)}...${password.slice(-1)}`);
+            console.log(`[AUTH] Login failed: Password mismatch for ${email}.`);
             return res.status(401).json({ message: 'Invalid email or password.' });
         }
 
-        if (admin.isTotpEnabled) {
-            console.log(`[AUTH] TOTP is enabled for ${email}. Prompting for TOTP code.`);
-            return res.status(200).json({ message: 'TOTP required.', requireTotp: true, email: admin.email });
+        // Case A: 2FA NOT configured yet (First-time registration / reset)
+        if (!admin.isTotpEnabled || !admin.totpSecret) {
+            console.log(`[AUTH] 2FA not enabled for ${email}. Generating QR code for setup...`);
+            const secret = speakeasy.generateSecret({
+                length: 20,
+                name: `Spheronix Admin (${admin.email})`,
+                issuer: 'Spheronix Hackathon'
+            });
+
+            admin.tempTotpSecret = secret.base32;
+            await admin.save();
+
+            const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url);
+
+            return res.status(200).json({
+                status: 'SETUP_2FA',
+                email: admin.email,
+                qrCode: qrCodeUrl,
+                secretKey: secret.base32,
+                message: 'First time setup: please scan the QR code in Google Authenticator or Microsoft Authenticator.'
+            });
         }
 
-        // Generate and store login OTP (Enforced for all admin logins)
-        console.log(`[AUTH] Generating login OTP for ${email}...`);
-        const otp = generate6DigitOTP();
-        admin.loginOtp = otp;
-        admin.loginOtpExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-        
-        console.log(`[AUTH] Saving admin with new OTP...`);
-        await admin.save();
-        console.log(`[AUTH] Admin saved successfully with OTP.`);
-
-        // Dispatch OTP email immediately
-        sendOTPEmail(
-            admin.email,
-            otp,
-            'Spheronix Admin – Login Verification Code',
-            'Verifying your login'
-        ).catch(err => console.warn('[AUTH] Background email send notice:', err.message));
-
-        return res.status(200).json({ 
-            message: 'OTP sent to your email. Please verify to continue.',
-            requireOtp: true,
-            email: admin.email
+        // Case B: Returning admin with 2FA enabled
+        console.log(`[AUTH] 2FA active for ${email}. Requesting 6-digit Authenticator code.`);
+        return res.status(200).json({
+            status: 'REQUIRE_2FA',
+            email: admin.email,
+            message: 'Please enter the 6-digit code from your Authenticator app.'
         });
     } catch (err) {
         console.error('[AUTH] Login error detailed:', {
             message: err.message,
-            stack: err.stack,
-            emailStatus: !!(process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS)
+            stack: err.stack
         });
         return res.status(500).json({ 
             message: 'Server error during login.', 
-            error: err.message,
-            tip: 'Check your Render environment variables (EMAIL_HOST, EMAIL_USER, etc.)'
+            error: err.message
         });
     }
 };
 
-// ─── Step 2: Verify Login OTP (2FA) ─────────────────────────────────────────
-exports.verifyLoginOTP = async (req, res) => {
+// ─── Step 2A: Confirm First-Time 2FA Setup ───────────────────────────────────
+exports.confirm2FASetup = async (req, res) => {
     try {
-        const { email, otp } = req.body;
-        if (!email || !otp)
-            return res.status(400).json({ message: 'Email and OTP are required.' });
+        const { email, token } = req.body;
+        if (!email || !token) {
+            return res.status(400).json({ message: 'Email and 6-digit Authenticator code are required.' });
+        }
 
         const admin = await Admin.findOne({ email: email.trim().toLowerCase() });
-        if (!admin)
-            return res.status(401).json({ message: 'Admin not found.' });
+        if (!admin || !admin.tempTotpSecret) {
+            return res.status(400).json({ message: '2FA session expired. Please enter your email and password again.' });
+        }
 
-        if (!admin.loginOtp || admin.loginOtp !== otp)
-            return res.status(400).json({ message: 'Invalid OTP.' });
+        const verified = speakeasy.totp.verify({
+            secret: admin.tempTotpSecret,
+            encoding: 'base32',
+            token: token.trim(),
+            window: 2
+        });
 
-        if (new Date() > admin.loginOtpExpires)
-            return res.status(400).json({ message: 'OTP has expired. Please request a new one.' });
+        if (!verified) {
+            return res.status(400).json({ message: 'Invalid 6-digit code. Please check your phone time and app code.' });
+        }
 
-        // Clear OTP and issue JWT
-        admin.loginOtp = null;
-        admin.loginOtpExpires = null;
+        admin.isTotpEnabled = true;
+        admin.totpSecret = admin.tempTotpSecret;
+        admin.tempTotpSecret = null;
         await admin.save();
 
-        const token = jwt.sign({ id: admin._id, email: admin.email, role: admin.role }, process.env.JWT_SECRET, { expiresIn: '8h' });
+        const jwtToken = jwt.sign(
+            { id: admin._id, email: admin.email, role: admin.role },
+            process.env.JWT_SECRET || '8f4a3e2b9c7d1e5f8a0b3c6d9e2f5a8b1c4d7e0f3a6b9c2d5e8f1a4b7c0d3e6f',
+            { expiresIn: '8h' }
+        );
 
-        // Log the successful login
         const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-        await logAdminAction(admin.email, admin._id, 'LOGIN', { message: 'Admin logged in successfully via OTP' }, ip);
+        logAdminAction(admin.email, admin._id, 'SETUP_2FA_SUCCESS', { message: '2FA configured and verified successfully' }, ip).catch(() => {});
 
-        return res.status(200).json({ message: 'Login successful.', token });
+        console.log(`[AUTH] 2FA setup confirmed and activated for ${admin.email}`);
+        return res.status(200).json({
+            message: 'Two-factor authentication successfully configured.',
+            token: jwtToken,
+            user: { email: admin.email, role: admin.role, isTotpEnabled: true }
+        });
     } catch (err) {
-        console.error('Verify login OTP error:', err);
-        return res.status(500).json({ message: 'Server error during OTP verification.' });
+        console.error('Confirm 2FA Setup Error:', err);
+        return res.status(500).json({ message: 'Server error confirming 2FA setup.' });
     }
 };
 
-// ─── Resend Login OTP ────────────────────────────────────────────────────────
-exports.resendLoginOTP = async (req, res) => {
+// ─── Step 2B: Verify Returning 2FA Login ─────────────────────────────────────
+exports.verify2FALogin = async (req, res) => {
     try {
-        const { email } = req.body;
-        if (!email)
-            return res.status(400).json({ message: 'Email is required.' });
+        const { email, token } = req.body;
+        if (!email || !token) {
+            return res.status(400).json({ message: 'Email and 6-digit Authenticator code are required.' });
+        }
 
         const admin = await Admin.findOne({ email: email.trim().toLowerCase() });
-        if (!admin)
-            return res.status(401).json({ message: 'Admin not found.' });
+        if (!admin) {
+            return res.status(401).json({ message: 'Invalid credentials.' });
+        }
 
-        const otp = generate6DigitOTP();
-        admin.loginOtp = otp;
-        admin.loginOtpExpires = new Date(Date.now() + 5 * 60 * 1000);
-        await admin.save();
+        if (!admin.isTotpEnabled || !admin.totpSecret) {
+            return res.status(400).json({ message: '2FA is not set up. Please log in with password first.' });
+        }
 
-        // Dispatch OTP email immediately (non-blocking for fast UI response)
-        sendOTPEmail(
-            admin.email,
-            otp,
-            'Spheronix Admin – New Login Verification Code',
-            'Resending your login OTP'
-        ).catch(err => console.warn('[AUTH] Background resend email notice:', err.message));
+        const verified = speakeasy.totp.verify({
+            secret: admin.totpSecret,
+            encoding: 'base32',
+            token: token.trim(),
+            window: 2
+        });
 
-        return res.status(200).json({ message: 'New OTP sent to your email.' });
+        if (!verified) {
+            return res.status(401).json({ message: 'Invalid 6-digit code. Please check your Authenticator app and try again.' });
+        }
+
+        const jwtToken = jwt.sign(
+            { id: admin._id, email: admin.email, role: admin.role },
+            process.env.JWT_SECRET || '8f4a3e2b9c7d1e5f8a0b3c6d9e2f5a8b1c4d7e0f3a6b9c2d5e8f1a4b7c0d3e6f',
+            { expiresIn: '8h' }
+        );
+
+        const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+        logAdminAction(admin.email, admin._id, 'LOGIN_2FA_SUCCESS', { message: 'Admin logged in via 2FA' }, ip).catch(() => {});
+
+        console.log(`[AUTH] 2FA login verified for ${admin.email}`);
+        return res.status(200).json({
+            message: 'Login successful.',
+            token: jwtToken,
+            user: { email: admin.email, role: admin.role, isTotpEnabled: true }
+        });
     } catch (err) {
-        console.error('Resend login OTP error:', err);
-        return res.status(500).json({ message: 'Server error.' });
+        console.error('Verify 2FA Login Error:', err);
+        return res.status(500).json({ message: 'Server error verifying 2FA.' });
     }
 };
 
-// ─── Forgot Password – Request Reset OTP ─────────────────────────────────────
+// ─── Super Admin: List All Admins ────────────────────────────────────────────
+exports.getAdminsList = async (req, res) => {
+    try {
+        const admins = await Admin.find().select('email role isTotpEnabled createdAt updatedAt').sort({ email: 1 });
+        return res.status(200).json(admins);
+    } catch (err) {
+        console.error('Get Admins List Error:', err);
+        return res.status(500).json({ message: 'Server error fetching admin accounts.' });
+    }
+};
+
+// ─── Super Admin: Reset 2FA for Junior Admin ─────────────────────────────────
+exports.resetAdmin2FA = async (req, res) => {
+    try {
+        const { targetEmail } = req.body;
+        if (!targetEmail) {
+            return res.status(400).json({ message: 'Target email is required.' });
+        }
+
+        const cleanEmail = targetEmail.trim().toLowerCase();
+        const targetAdmin = await Admin.findOne({ email: cleanEmail });
+        if (!targetAdmin) {
+            return res.status(404).json({ message: `Admin ${cleanEmail} not found.` });
+        }
+
+        targetAdmin.isTotpEnabled = false;
+        targetAdmin.totpSecret = null;
+        targetAdmin.tempTotpSecret = null;
+        await targetAdmin.save();
+
+        const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+        const operatorEmail = req.user?.email || req.admin?.email;
+        const operatorId = req.user?.id || req.admin?._id;
+        logAdminAction(operatorEmail, operatorId, 'RESET_ADMIN_2FA', {
+            targetEmail: cleanEmail,
+            message: `Super Admin reset 2FA for ${cleanEmail}`
+        }, ip).catch(() => {});
+
+        console.log(`[AUTH] Super Admin ${operatorEmail} reset 2FA for ${cleanEmail}`);
+        return res.status(200).json({
+            message: `2FA reset successfully for ${cleanEmail}. They will be prompted to scan a new QR code on next login.`
+        });
+    } catch (err) {
+        console.error('Reset Admin 2FA Error:', err);
+        return res.status(500).json({ message: 'Server error resetting 2FA.' });
+    }
+};
+
+// ─── Password Reset Helpers (For recovery if needed) ─────────────────────────
 exports.forgotPassword = async (req, res) => {
-    try {
-        const { email } = req.body;
-        if (!email)
-            return res.status(400).json({ message: 'Email is required.' });
-
-        const admin = await Admin.findOne({ email: email.trim().toLowerCase() });
-        if (!admin)
-            return res.status(404).json({ message: 'No admin found with that email.' });
-
-        const otp = generate6DigitOTP();
-        admin.resetOtp = otp;
-        admin.resetOtpExpires = new Date(Date.now() + 5 * 60 * 1000);
-        admin.isResetOtpVerified = false;
-        await admin.save();
-
-        // Dispatch reset OTP email immediately (non-blocking for fast UI response)
-        sendOTPEmail(
-            admin.email,
-            otp,
-            'Spheronix Admin – Password Reset Code',
-            'Requested a password reset'
-        ).catch(err => console.warn('[AUTH] Background reset email notice:', err.message));
-
-        return res.status(200).json({ message: 'Password reset OTP sent to your email.' });
-    } catch (err) {
-        console.error('Forgot password error:', err);
-        return res.status(500).json({ message: 'Server error.' });
-    }
+    return res.status(400).json({ 
+        message: 'Password reset via email is disabled. Please contact Super Admin (yashwanthkumar87657@gmail.com).' 
+    });
 };
-
-// ─── Forgot Password – Verify Reset OTP ─────────────────────────────────────
 exports.verifyResetOTP = async (req, res) => {
-    try {
-        const { email, otp } = req.body;
-        if (!email || !otp)
-            return res.status(400).json({ message: 'Email and OTP are required.' });
-
-        const admin = await Admin.findOne({ email: email.trim().toLowerCase() });
-        if (!admin)
-            return res.status(404).json({ message: 'Admin not found.' });
-
-        if (!admin.resetOtp || admin.resetOtp !== otp)
-            return res.status(400).json({ message: 'Invalid OTP.' });
-
-        if (new Date() > admin.resetOtpExpires)
-            return res.status(400).json({ message: 'OTP has expired. Please request a new one.' });
-
-        admin.isResetOtpVerified = true;
-        await admin.save();
-
-        return res.status(200).json({ message: 'OTP verified. You can now reset your password.' });
-    } catch (err) {
-        console.error('Verify reset OTP error:', err);
-        return res.status(500).json({ message: 'Server error.' });
-    }
+    return res.status(400).json({ message: 'Please contact Super Admin to reset credentials.' });
 };
-
-// ─── Forgot Password – Reset Password ────────────────────────────────────────
 exports.resetPassword = async (req, res) => {
-    try {
-        const { email, newPassword, confirmPassword } = req.body;
-        if (!email || !newPassword || !confirmPassword)
-            return res.status(400).json({ message: 'All fields are required.' });
-
-        if (newPassword !== confirmPassword)
-            return res.status(400).json({ message: 'Passwords do not match.' });
-
-        if (newPassword.length < 8)
-            return res.status(400).json({ message: 'Password must be at least 8 characters.' });
-
-        const admin = await Admin.findOne({ email: email.trim().toLowerCase() });
-        if (!admin)
-            return res.status(404).json({ message: 'Admin not found.' });
-
-        if (!admin.isResetOtpVerified)
-            return res.status(403).json({ message: 'OTP not verified. Please verify the OTP first.' });
-
-        admin.password = newPassword;
-        admin.resetOtp = null;
-        admin.resetOtpExpires = null;
-        admin.isResetOtpVerified = false;
-        await admin.save();
-
-        return res.status(200).json({ message: 'Password reset successfully. You can now log in.' });
-    } catch (err) {
-        console.error('Reset password error:', err);
-        return res.status(500).json({ message: 'Server error.' });
-    }
+    return res.status(400).json({ message: 'Please contact Super Admin to reset credentials.' });
 };
