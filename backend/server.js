@@ -1,3 +1,10 @@
+// Node on some Windows setups picks 127.0.0.1 as its DNS server, which breaks
+// mongodb+srv:// SRV lookups (querySrv ECONNREFUSED). Use public resolvers instead.
+const dns = require('dns');
+if (dns.getServers().every((s) => s === '127.0.0.1' || s === '::1')) {
+    dns.setServers(['8.8.8.8', '1.1.1.1']);
+}
+
 const express = require('express');
 const http = require('http');
 const mongoose = require('mongoose');
