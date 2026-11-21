@@ -17,6 +17,8 @@ const adminSchema = new mongoose.Schema({
     totpSecret: { type: String, default: null },
     tempTotpSecret: { type: String, default: null },
     isTotpEnabled: { type: Boolean, default: false },
+    last2FAResetAt: { type: Date, default: null },
+    last2FAResetBy: { type: String, default: null },
     recoveryCodes: [{ type: String }]
 }, { timestamps: true });
 

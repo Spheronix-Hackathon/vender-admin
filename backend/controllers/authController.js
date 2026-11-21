@@ -202,7 +202,7 @@ exports.verify2FALogin = async (req, res) => {
 // ─── Super Admin: List All Admins ────────────────────────────────────────────
 exports.getAdminsList = async (req, res) => {
     try {
-        const admins = await Admin.find().select('email role isTotpEnabled createdAt updatedAt').sort({ email: 1 });
+        const admins = await Admin.find().select('email role isTotpEnabled last2FAResetAt last2FAResetBy createdAt updatedAt').sort({ email: 1 });
         return res.status(200).json(admins);
     } catch (err) {
         console.error('Get Admins List Error:', err);
@@ -224,22 +224,37 @@ exports.resetAdmin2FA = async (req, res) => {
             return res.status(404).json({ message: `Admin ${cleanEmail} not found.` });
         }
 
+        // Prevent resetting the primary super admin account
+        if (cleanEmail === 'yashwanthkumar87657@gmail.com') {
+            return res.status(400).json({ message: 'Primary Super Admin account 2FA cannot be reset from this panel.' });
+        }
+
+        const operatorEmail = req.user?.email || req.admin?.email || 'yashwanthkumar87657@gmail.com';
+        const operatorId = req.user?.id || req.admin?._id;
+
         targetAdmin.isTotpEnabled = false;
         targetAdmin.totpSecret = null;
         targetAdmin.tempTotpSecret = null;
+        targetAdmin.last2FAResetAt = new Date();
+        targetAdmin.last2FAResetBy = operatorEmail;
         await targetAdmin.save();
 
         const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-        const operatorEmail = req.user?.email || req.admin?.email;
-        const operatorId = req.user?.id || req.admin?._id;
         logAdminAction(operatorEmail, operatorId, 'RESET_ADMIN_2FA', {
             targetEmail: cleanEmail,
-            message: `Super Admin reset 2FA for ${cleanEmail}`
+            message: `Super Admin reset 2FA/MFA for ${cleanEmail}. Brand new QR code will be presented on next login.`
         }, ip).catch(() => {});
 
         console.log(`[AUTH] Super Admin ${operatorEmail} reset 2FA for ${cleanEmail}`);
         return res.status(200).json({
-            message: `2FA reset successfully for ${cleanEmail}. They will be prompted to scan a new QR code on next login.`
+            success: true,
+            message: `MFA reset successfully for ${cleanEmail}. They will be prompted to scan a new QR code upon their next login.`,
+            admin: {
+                email: targetAdmin.email,
+                isTotpEnabled: false,
+                last2FAResetAt: targetAdmin.last2FAResetAt,
+                last2FAResetBy: targetAdmin.last2FAResetBy
+            }
         });
     } catch (err) {
         console.error('Reset Admin 2FA Error:', err);
