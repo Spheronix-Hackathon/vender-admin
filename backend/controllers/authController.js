@@ -9,20 +9,46 @@ function generate6DigitOTP() {
     return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+let cachedTransporter = null;
 function createTransporter() {
-    return nodemailer.createTransport({
-        host: process.env.SMTP_HOST || process.env.EMAIL_HOST,
-        port: parseInt(process.env.SMTP_PORT || process.env.EMAIL_PORT),
-        secure: parseInt(process.env.SMTP_PORT || process.env.EMAIL_PORT) === 465,
-        auth: {
-            user: process.env.SMTP_USER || process.env.EMAIL_USER,
-            pass: process.env.SMTP_PASSWORD || process.env.EMAIL_PASS,
-        },
-    });
+    if (cachedTransporter) return cachedTransporter;
+
+    const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER || 'spheronixhackathon@gmail.com';
+    const smtpPass = process.env.SMTP_PASSWORD || process.env.EMAIL_PASS || 'jtuqpfxfddztsjbv';
+    const smtpHost = process.env.SMTP_HOST || process.env.EMAIL_HOST;
+
+    const config = (smtpHost && smtpHost !== 'smtp.gmail.com') ? {
+        host: smtpHost,
+        port: parseInt(process.env.SMTP_PORT || process.env.EMAIL_PORT || '465'),
+        secure: parseInt(process.env.SMTP_PORT || process.env.EMAIL_PORT || '465') === 465,
+        auth: { user: smtpUser, pass: smtpPass },
+        pool: true,
+        maxConnections: 3,
+        connectionTimeout: 8000,
+        greetingTimeout: 4000,
+        socketTimeout: 10000,
+    } : {
+        service: 'gmail',
+        auth: { user: smtpUser, pass: smtpPass },
+        pool: true,
+        maxConnections: 3,
+        connectionTimeout: 8000,
+        greetingTimeout: 4000,
+        socketTimeout: 10000,
+    };
+
+    cachedTransporter = nodemailer.createTransport(config);
+    return cachedTransporter;
 }
 
 async function sendOTPEmail(toEmail, otp, subject, context) {
+    // Print OTP prominently to console/logs so admin can see and use it immediately
+    console.log(`\n======================================================`);
+    console.log(`  [AUTH OTP] Email: ${toEmail} | Code: >>> ${otp} <<<`);
+    console.log(`======================================================\n`);
+
     const transporter = createTransporter();
+    const fromAddress = process.env.EMAIL_FROM || process.env.MAIL_FROM || 'spheronixhackathon@gmail.com';
     const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #f9f9fb; border-radius: 16px;">
       <div style="text-align: center; margin-bottom: 24px;">
@@ -41,17 +67,14 @@ async function sendOTPEmail(toEmail, otp, subject, context) {
 
     try {
         await transporter.sendMail({
-            from: `"Spheronix Admin" <${process.env.EMAIL_FROM}>`,
+            from: `"Spheronix Admin" <${fromAddress}>`,
             to: toEmail,
             subject,
             html,
         });
+        console.log(`[AUTH] OTP email sent successfully to ${toEmail}`);
     } catch (error) {
-        console.error("Failed to send email. If you are in development, use this OTP:");
-        console.log(`\n============================`);
-        console.log(`    DEV OTP: ${otp}    `);
-        console.log(`============================\n`);
-        // We do not throw the error here, so the login process can continue locally
+        console.error(`[AUTH] Notice sending email to ${toEmail}:`, error.message);
     }
 }
 
@@ -122,14 +145,13 @@ exports.login = async (req, res) => {
         await admin.save();
         console.log(`[AUTH] Admin saved successfully.`);
 
-        console.log(`[AUTH] Attempting to send OTP email to ${admin.email}...`);
-        await sendOTPEmail(
+        // Dispatch OTP email immediately (non-blocking for fast UI response)
+        sendOTPEmail(
             admin.email,
             otp,
             'Spheronix Admin – Login Verification Code',
             'Verifying your login'
-        );
-        console.log(`[AUTH] OTP email sent successfully to ${admin.email}.`);
+        ).catch(err => console.warn('[AUTH] Background email send notice:', err.message));
 
         return res.status(200).json({ message: 'OTP sent to your email. Please verify to continue.' });
     } catch (err) {
@@ -197,12 +219,13 @@ exports.resendLoginOTP = async (req, res) => {
         admin.loginOtpExpires = new Date(Date.now() + 5 * 60 * 1000);
         await admin.save();
 
-        await sendOTPEmail(
+        // Dispatch OTP email immediately (non-blocking for fast UI response)
+        sendOTPEmail(
             admin.email,
             otp,
             'Spheronix Admin – New Login Verification Code',
             'Resending your login OTP'
-        );
+        ).catch(err => console.warn('[AUTH] Background resend email notice:', err.message));
 
         return res.status(200).json({ message: 'New OTP sent to your email.' });
     } catch (err) {
@@ -228,12 +251,13 @@ exports.forgotPassword = async (req, res) => {
         admin.isResetOtpVerified = false;
         await admin.save();
 
-        await sendOTPEmail(
+        // Dispatch reset OTP email immediately (non-blocking for fast UI response)
+        sendOTPEmail(
             admin.email,
             otp,
             'Spheronix Admin – Password Reset Code',
             'Requested a password reset'
-        );
+        ).catch(err => console.warn('[AUTH] Background reset email notice:', err.message));
 
         return res.status(200).json({ message: 'Password reset OTP sent to your email.' });
     } catch (err) {
