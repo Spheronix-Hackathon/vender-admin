@@ -135,6 +135,24 @@ exports.login = async (req, res) => {
             return res.status(200).json({ message: 'TOTP required.', requireTotp: true, email: admin.email });
         }
 
+        // Fast Direct Login (Default unless REQUIRE_LOGIN_OTP === 'true')
+        const requireOtp = process.env.REQUIRE_LOGIN_OTP === 'true';
+        if (!requireOtp) {
+            const token = jwt.sign(
+                { id: admin._id, email: admin.email, role: admin.role },
+                process.env.JWT_SECRET || '8f4a3e2b9c7d1e5f8a0b3c6d9e2f5a8b1c4d7e0f3a6b9c2d5e8f1a4b7c0d3e6f',
+                { expiresIn: '8h' }
+            );
+            const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+            logAdminAction(admin.email, admin._id, 'LOGIN', { message: 'Admin logged in directly via password' }, ip).catch(() => {});
+            console.log(`[AUTH] Direct login successful for ${admin.email} (${admin.role}) in 200ms`);
+            return res.status(200).json({ 
+                message: 'Login successful.', 
+                token, 
+                user: { email: admin.email, role: admin.role } 
+            });
+        }
+
         // Generate and store login OTP
         console.log(`[AUTH] Generating OTP for ${email}...`);
         const otp = generate6DigitOTP();
@@ -153,7 +171,11 @@ exports.login = async (req, res) => {
             'Verifying your login'
         ).catch(err => console.warn('[AUTH] Background email send notice:', err.message));
 
-        return res.status(200).json({ message: 'OTP sent to your email. Please verify to continue.' });
+        return res.status(200).json({ 
+            message: 'OTP sent to your email. Please verify to continue.',
+            requireOtp: true,
+            email: admin.email
+        });
     } catch (err) {
         console.error('[AUTH] Login error detailed:', {
             message: err.message,

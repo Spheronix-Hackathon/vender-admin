@@ -60,6 +60,12 @@ export default function LoginPage() {
         email: email.trim(), 
         password: password.trim() 
       });
+      if (res.data.token) {
+        localStorage.setItem('admin_token', res.data.token);
+        setSuccess('Login successful! Redirecting...');
+        setTimeout(() => router.replace('/'), 500);
+        return;
+      }
       if (res.data.requireTotp) {
         setInfo('Please enter the 6-digit code from your Authenticator app.');
         setStep('login-totp');
