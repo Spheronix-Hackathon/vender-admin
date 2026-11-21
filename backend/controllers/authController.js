@@ -9,36 +9,24 @@ function generate6DigitOTP() {
     return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-let cachedTransporter = null;
 function createTransporter() {
-    if (cachedTransporter) return cachedTransporter;
+    const smtpUser = process.env.SMTP_USER || 'spheronixhackathon@gmail.com';
+    const smtpPass = process.env.SMTP_PASSWORD || 'jtuqpfxfddztsjbv';
+    const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+    const smtpPort = parseInt(process.env.SMTP_PORT || '465', 10);
 
-    const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER || 'spheronixhackathon@gmail.com';
-    const smtpPass = process.env.SMTP_PASSWORD || process.env.EMAIL_PASS || 'jtuqpfxfddztsjbv';
-    const smtpHost = process.env.SMTP_HOST || process.env.EMAIL_HOST;
-
-    const config = (smtpHost && smtpHost !== 'smtp.gmail.com') ? {
+    return nodemailer.createTransport({
         host: smtpHost,
-        port: parseInt(process.env.SMTP_PORT || process.env.EMAIL_PORT || '465'),
-        secure: parseInt(process.env.SMTP_PORT || process.env.EMAIL_PORT || '465') === 465,
-        auth: { user: smtpUser, pass: smtpPass },
-        pool: true,
-        maxConnections: 3,
-        connectionTimeout: 8000,
-        greetingTimeout: 4000,
-        socketTimeout: 10000,
-    } : {
-        service: 'gmail',
-        auth: { user: smtpUser, pass: smtpPass },
-        pool: true,
-        maxConnections: 3,
-        connectionTimeout: 8000,
-        greetingTimeout: 4000,
-        socketTimeout: 10000,
-    };
-
-    cachedTransporter = nodemailer.createTransport(config);
-    return cachedTransporter;
+        port: smtpPort,
+        secure: smtpPort === 465,
+        auth: {
+            user: smtpUser,
+            pass: smtpPass
+        },
+        connectionTimeout: 10000,
+        greetingTimeout: 5000,
+        socketTimeout: 15000
+    });
 }
 
 async function sendOTPEmail(toEmail, otp, subject, context) {
@@ -48,7 +36,7 @@ async function sendOTPEmail(toEmail, otp, subject, context) {
     console.log(`======================================================\n`);
 
     const transporter = createTransporter();
-    const fromAddress = process.env.EMAIL_FROM || process.env.MAIL_FROM || 'spheronixhackathon@gmail.com';
+    const fromAddress = process.env.MAIL_FROM || process.env.SMTP_USER || 'spheronixhackathon@gmail.com';
     const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #f9f9fb; border-radius: 16px;">
       <div style="text-align: center; margin-bottom: 24px;">
@@ -66,15 +54,17 @@ async function sendOTPEmail(toEmail, otp, subject, context) {
     </div>`;
 
     try {
-        await transporter.sendMail({
+        const info = await transporter.sendMail({
             from: `"Spheronix Admin" <${fromAddress}>`,
             to: toEmail,
             subject,
             html,
         });
-        console.log(`[AUTH] OTP email sent successfully to ${toEmail}`);
+        console.log(`[AUTH] OTP email sent successfully to ${toEmail}: ${info.response || 'OK'}`);
+        return true;
     } catch (error) {
         console.error(`[AUTH] Notice sending email to ${toEmail}:`, error.message);
+        return false;
     }
 }
 
@@ -135,35 +125,17 @@ exports.login = async (req, res) => {
             return res.status(200).json({ message: 'TOTP required.', requireTotp: true, email: admin.email });
         }
 
-        // Fast Direct Login (Default unless REQUIRE_LOGIN_OTP === 'true')
-        const requireOtp = process.env.REQUIRE_LOGIN_OTP === 'true';
-        if (!requireOtp) {
-            const token = jwt.sign(
-                { id: admin._id, email: admin.email, role: admin.role },
-                process.env.JWT_SECRET || '8f4a3e2b9c7d1e5f8a0b3c6d9e2f5a8b1c4d7e0f3a6b9c2d5e8f1a4b7c0d3e6f',
-                { expiresIn: '8h' }
-            );
-            const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-            logAdminAction(admin.email, admin._id, 'LOGIN', { message: 'Admin logged in directly via password' }, ip).catch(() => {});
-            console.log(`[AUTH] Direct login successful for ${admin.email} (${admin.role}) in 200ms`);
-            return res.status(200).json({ 
-                message: 'Login successful.', 
-                token, 
-                user: { email: admin.email, role: admin.role } 
-            });
-        }
-
-        // Generate and store login OTP
-        console.log(`[AUTH] Generating OTP for ${email}...`);
+        // Generate and store login OTP (Enforced for all admin logins)
+        console.log(`[AUTH] Generating login OTP for ${email}...`);
         const otp = generate6DigitOTP();
         admin.loginOtp = otp;
         admin.loginOtpExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
         
         console.log(`[AUTH] Saving admin with new OTP...`);
         await admin.save();
-        console.log(`[AUTH] Admin saved successfully.`);
+        console.log(`[AUTH] Admin saved successfully with OTP.`);
 
-        // Dispatch OTP email immediately (non-blocking for fast UI response)
+        // Dispatch OTP email immediately
         sendOTPEmail(
             admin.email,
             otp,
