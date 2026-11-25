@@ -167,11 +167,18 @@ exports.getVendorRegistrations = async (req, res) => {
                     { branch: regex },
                     { project_selected: regex },
                     { task_selected: regex },
+                    { participant_id: regex },
                     { 'leader.name': regex },
                     { 'leader.email': regex },
                     { 'leader.mobile': regex },
+                    { 'leader.phone': regex },
                     { 'leader.city': regex },
-                    { 'leader.college': regex }
+                    { 'leader.college': regex },
+                    { 'leader.branch': regex },
+                    { 'leader.rollNumber': regex },
+                    { 'leader.participant_id': regex },
+                    { 'payment.transaction_id': regex },
+                    { transaction_id: regex }
                 ]
             });
         }
@@ -653,14 +660,45 @@ exports.updateStudentsStatus = async (req, res) => {
 exports.updateStudent = async (req, res) => {
     try {
         const { id } = req.params;
-        const updateData = req.body;
-        updateData.updatedAt = new Date();
+        const body = req.body || {};
 
-        const updated = await VendorRegistration.findByIdAndUpdate(id, updateData, { new: true });
+        // Whitelist allowed fields to prevent mass assignment / unauthorized field overwrites
+        const allowedFields = [
+            'fullName', 'email', 'mobile', 'phone', 'city', 'college', 'branch',
+            'rollNumber', 'currentYear', 'project_selected', 'task_selected',
+            'github_link', 'feedback', 'user_feedback', 'Reviewedby', 'is_reviewed',
+            'is_selected', 'examStatus'
+        ];
+
+        const sanitizedUpdate = {};
+        for (const field of allowedFields) {
+            if (body[field] !== undefined) {
+                sanitizedUpdate[field] = body[field];
+            }
+        }
+
+        // Keep leader subdocument in sync if present
+        if (body.fullName !== undefined) sanitizedUpdate['leader.name'] = body.fullName;
+        if (body.email !== undefined) sanitizedUpdate['leader.email'] = body.email;
+        if (body.mobile !== undefined || body.phone !== undefined) {
+            const phoneVal = body.mobile || body.phone;
+            sanitizedUpdate['leader.mobile'] = phoneVal;
+            sanitizedUpdate['leader.phone'] = phoneVal;
+        }
+        if (body.city !== undefined) sanitizedUpdate['leader.city'] = body.city;
+        if (body.college !== undefined) sanitizedUpdate['leader.college'] = body.college;
+        if (body.branch !== undefined) sanitizedUpdate['leader.branch'] = body.branch;
+        if (body.rollNumber !== undefined) sanitizedUpdate['leader.rollNumber'] = body.rollNumber;
+        if (body.currentYear !== undefined) sanitizedUpdate['leader.currentYear'] = body.currentYear;
+
+        sanitizedUpdate.updatedAt = new Date();
+
+        const updated = await VendorRegistration.findByIdAndUpdate(id, { $set: sanitizedUpdate }, { new: true });
         if (!updated) {
             return res.status(404).json({ success: false, message: 'Vendor student not found' });
         }
-        res.status(200).json({ success: true, message: 'Student updated successfully', student: mapRegistrationToStudent(updated) });
+        const taskCategories = await getTaskCategories();
+        res.status(200).json({ success: true, message: 'Student updated successfully', student: mapRegistrationToStudent(updated, taskCategories, true) });
     } catch (error) {
         console.error('Error updating vendor student:', error);
         res.status(500).json({ success: false, message: 'Failed to update student', error: error.message });

@@ -166,7 +166,7 @@ app.use('/api/admin-logs', adminLogsRoutes);
 
 app.get('/', (req, res) => res.json({ message: 'Vendor Admin Backend API is running.', status: 'online' }));
 
-const PORT = process.env.PORT || 5051;
+const PORT = process.env.PORT || 5050;
 
 server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {

@@ -17,6 +17,7 @@ import PremiumDropdown from '@/components/PremiumDropdown';
 import ExportPreviewModal from '@/components/ExportPreviewModal';
 import LastFetched from '@/components/LastFetched';
 import RefreshButton from '@/components/RefreshButton';
+import { socket } from '@/lib/socket';
 import api from '@/lib/api';
 import * as XLSX from 'xlsx';
 
@@ -140,9 +141,38 @@ function VendorMainContent({ initialSection }: VendorViewProps) {
     fetchFilterOptions();
   }, [isCompletedSection]);
 
+  // Debounced fetch for search and filters to prevent keystroke race conditions
   useEffect(() => {
-    fetchStudents(true);
+    const timer = setTimeout(() => {
+      fetchStudents(true);
+    }, 300);
+    return () => clearTimeout(timer);
   }, [isCompletedSection, search, mode, college, branch, city, startDate, endDate, statusFilter, examStatusFilter, githubLinkStatus]);
+
+  // Real-time live synchronization with MongoDB change stream events
+  useEffect(() => {
+    let debounceTimer: NodeJS.Timeout;
+    const debouncedRefresh = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        fetchStudents(false);
+        fetchFilterOptions();
+      }, 500);
+    };
+
+    socket.on('vendorRegistrationAdded', debouncedRefresh);
+    socket.on('vendorRegistrationUpdated', debouncedRefresh);
+    socket.on('registrationUpdated', debouncedRefresh);
+    socket.on('newPayment', debouncedRefresh);
+
+    return () => {
+      clearTimeout(debounceTimer);
+      socket.off('vendorRegistrationAdded', debouncedRefresh);
+      socket.off('vendorRegistrationUpdated', debouncedRefresh);
+      socket.off('registrationUpdated', debouncedRefresh);
+      socket.off('newPayment', debouncedRefresh);
+    };
+  }, [isCompletedSection]);
 
   // Financial KPI calculations
   const { teamStudentsCount, individualStudentsCount, totalCollegesCount } = useMemo(() => {

@@ -6,6 +6,7 @@ import { FileDown } from 'lucide-react';
 import RefreshButton from '@/components/RefreshButton';
 import LastFetched from '@/components/LastFetched';
 import { socket } from '@/lib/socket';
+import * as XLSX from 'xlsx';
 import axios from 'axios';
 
 import api from '@/lib/api';
@@ -98,17 +99,26 @@ export default function PaymentsPage() {
 
     const handleExport = async () => {
         try {
-            const response = await api.get('/vendor/export', { responseType: 'blob' });
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', 'vendor_payments_report.csv');
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
+            const params = new URLSearchParams({
+                timeRange,
+                date,
+                startDate,
+                endDate,
+                status: 'completed'
+            });
+            const response = await api.get(`/vendor/export?${params.toString()}`);
+            const rows = response.data?.data || payments;
+            if (!rows || rows.length === 0) {
+                alert('No payment records found to export.');
+                return;
+            }
+            const worksheet = XLSX.utils.json_to_sheet(rows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Payments_Report');
+            XLSX.writeFile(workbook, `Vendor_Payments_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
         } catch (error) {
             console.error('Export failed:', error);
-            alert('Failed to export CSV. Please try again.');
+            alert('Failed to export report. Please try again.');
         }
     };
 

@@ -98,10 +98,42 @@ exports.getAllPayments = async (req, res) => {
                 .skip((page - 1) * limitNum);
         }
 
-        const registrations = await registrationsQuery.lean();
-        const count = await VendorRegistration.countDocuments(query);
+        const completedRevenueMatch = {
+            ...query,
+            registrationCompleted: true,
+            $or: [
+                { 'payment.status': { $in: ['completed', 'success', 'paid'] } },
+                { payment_status: { $in: ['completed', 'success', 'paid'] } }
+            ]
+        };
 
-        let totalRevenue = 0;
+        const [registrations, count, revenueAgg] = await Promise.all([
+            registrationsQuery.lean(),
+            VendorRegistration.countDocuments(query),
+            VendorRegistration.aggregate([
+                { $match: completedRevenueMatch },
+                {
+                    $project: {
+                        amount: {
+                            $cond: {
+                                if: { $and: [{ $ne: ["$payment.amount", null] }, { $gt: ["$payment.amount", 0] }] },
+                                then: { $toDouble: "$payment.amount" },
+                                else: {
+                                    $multiply: [
+                                        { $add: [1, { $size: { $ifNull: ["$team_members", []] } }] },
+                                        399
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                { $group: { _id: null, total: { $sum: "$amount" } } }
+            ])
+        ]);
+
+        const totalRevenue = (revenueAgg && revenueAgg[0] && revenueAgg[0].total) ? revenueAgg[0].total : 0;
+
         const payments = registrations.map(reg => {
             const payment = reg.payment || {};
             const teamSize = 1 + (Array.isArray(reg.team_members) ? reg.team_members.length : 0);
@@ -113,10 +145,6 @@ exports.getAllPayments = async (req, res) => {
             const hasCompletedPayment = ['completed', 'success', 'paid'].includes(payment.status?.toLowerCase()) ||
                 ['completed', 'success', 'paid'].includes(reg.payment_status?.toLowerCase());
             const isSuccess = reg.registrationCompleted === true && hasCompletedPayment;
-
-            if (isSuccess) {
-                totalRevenue += amount;
-            }
 
             const docId = reg._id ? reg._id.toString() : '';
             const txnId = payment.transaction_id || payment.order_id || reg.participant_id || docId || 'N/A';
