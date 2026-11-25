@@ -927,17 +927,28 @@ const IndividualStudentTable = ({ data, onStatusUpdate, onReAdd, selectedIds = [
                                         <td className="p-5">
                                             <div className="flex items-center gap-1.5 flex-wrap">
                                                 {(() => {
+                                                    const hasReceipt = Boolean(
+                                                        (student.receipt && student.receipt !== 'N/A' && !student.receipt.endsWith('/payment-receipt')) ||
+                                                        (student.receipt_url && student.receipt_url !== 'N/A') ||
+                                                        (student.receipt_name && student.receipt_name !== 'N/A')
+                                                    );
                                                     const activeReceiptEndpoint = student.receipt || student.receipt_url || `/api${apiPath}/${student._id}/payment-receipt`;
                                                     return (
                                                         <>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleOpenReceipt(activeReceiptEndpoint, student.student_id, student.receipt_name)}
-                                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#e8f2ff] text-[#007aff] hover:bg-[#d1e5ff] hover:shadow-sm transition-all duration-200 rounded-full text-[10px] font-bold uppercase tracking-wider cursor-pointer"
-                                                            >
-                                                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-                                                                View Receipt
-                                                            </button>
+                                                            {hasReceipt ? (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleOpenReceipt(activeReceiptEndpoint, student.student_id, student.receipt_name)}
+                                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#e8f2ff] text-[#007aff] hover:bg-[#d1e5ff] hover:shadow-sm transition-all duration-200 rounded-full text-[10px] font-bold uppercase tracking-wider cursor-pointer"
+                                                                >
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                                                                    View Receipt
+                                                                </button>
+                                                            ) : (
+                                                                <span className="text-[10px] font-medium text-[#86868b] bg-gray-50 border border-gray-200/60 px-2 py-0.5 rounded-full inline-block" title="Receipt not uploaded">
+                                                                    No Receipt
+                                                                </span>
+                                                            )}
                                                             {canUploadReceipt && (
                                                                 <label
                                                                     htmlFor={`reupload-receipt-${student._id}`}

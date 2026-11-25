@@ -8,16 +8,24 @@ exports.getAllPayments = async (req, res) => {
         let query = {};
         if (status) {
             if (status.toLowerCase() === 'completed' || status.toLowerCase() === 'success') {
-                query.$or = [
+                query.$and = [
                     { registrationCompleted: true },
-                    { 'payment.status': { $in: ['completed', 'success', 'paid'] } },
-                    { payment_status: { $in: ['completed', 'success', 'paid'] } }
+                    {
+                        $or: [
+                            { 'payment.status': { $in: ['completed', 'success', 'paid'] } },
+                            { payment_status: { $in: ['completed', 'success', 'paid'] } }
+                        ]
+                    }
                 ];
             } else {
-                query.$and = [
+                query.$or = [
                     { registrationCompleted: { $ne: true } },
-                    { 'payment.status': { $nin: ['completed', 'success', 'paid'] } },
-                    { payment_status: { $nin: ['completed', 'success', 'paid'] } }
+                    {
+                        $and: [
+                            { 'payment.status': { $nin: ['completed', 'success', 'paid'] } },
+                            { payment_status: { $nin: ['completed', 'success', 'paid'] } }
+                        ]
+                    }
                 ];
             }
         }
@@ -102,9 +110,9 @@ exports.getAllPayments = async (req, res) => {
                 ? Number(payment.amount)
                 : (teamSize * perHead);
 
-            const isSuccess = reg.registrationCompleted === true ||
-                ['completed', 'success', 'paid'].includes(payment.status?.toLowerCase()) ||
+            const hasCompletedPayment = ['completed', 'success', 'paid'].includes(payment.status?.toLowerCase()) ||
                 ['completed', 'success', 'paid'].includes(reg.payment_status?.toLowerCase());
+            const isSuccess = reg.registrationCompleted === true && hasCompletedPayment;
 
             if (isSuccess) {
                 totalRevenue += amount;
@@ -145,8 +153,8 @@ exports.getRevenueAnalytics = async (req, res) => {
         const revenue = await VendorRegistration.aggregate([
             {
                 $match: {
+                    registrationCompleted: true,
                     $or: [
-                        { registrationCompleted: true },
                         { 'payment.status': { $in: ['completed', 'success', 'paid'] } },
                         { payment_status: { $in: ['completed', 'success', 'paid'] } }
                     ]

@@ -25,8 +25,8 @@ exports.clearDashboardCache = () => {
 
 function getVendorApprovedCondition() {
     return {
+        registrationCompleted: true,
         $or: [
-            { registrationCompleted: true },
             { 'payment.status': { $in: ['completed', 'success', 'paid'] } },
             { payment_status: { $in: ['completed', 'success', 'paid'] } }
         ]
@@ -53,9 +53,9 @@ exports.getDashboardStats = async (req, res) => {
         totalVendorStudents = vendorRegs.length;
 
         vendorRegs.forEach(reg => {
-            const isCompleted = reg.registrationCompleted === true ||
-                ['completed', 'success', 'paid'].includes(reg.payment_status?.toLowerCase()) ||
+            const hasCompletedPayment = ['completed', 'success', 'paid'].includes(reg.payment_status?.toLowerCase()) ||
                 ['completed', 'success', 'paid'].includes(reg.payment?.status?.toLowerCase());
+            const isCompleted = reg.registrationCompleted === true && hasCompletedPayment;
 
             const teamSize = 1 + (Array.isArray(reg.team_members) ? reg.team_members.length : 0);
             const amt = Number(reg.payment?.amount) || (teamSize * 399);
@@ -363,9 +363,9 @@ exports.getAnalyticsSummary = async (req, res) => {
         let revenue = 0;
 
         vendorRegs.forEach(reg => {
-            const isCompleted = reg.registrationCompleted === true ||
-                ['completed', 'success', 'paid'].includes(reg.payment_status?.toLowerCase()) ||
+            const hasCompletedPayment = ['completed', 'success', 'paid'].includes(reg.payment_status?.toLowerCase()) ||
                 ['completed', 'success', 'paid'].includes(reg.payment?.status?.toLowerCase());
+            const isCompleted = reg.registrationCompleted === true && hasCompletedPayment;
 
             const teamSize = 1 + (Array.isArray(reg.team_members) ? reg.team_members.length : 0);
             const amt = Number(reg.payment?.amount) || (teamSize * 399);

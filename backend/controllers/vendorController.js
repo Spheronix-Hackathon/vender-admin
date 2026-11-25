@@ -27,9 +27,9 @@ const mapRegistrationToStudent = (reg, taskCategories = [], isAdminView = true) 
         computedAmount = Number(reg.payment.amount);
     }
 
-    const isCompleted = reg.registrationCompleted === true ||
-        ['completed', 'success', 'paid'].includes(reg.payment_status?.toLowerCase()) ||
+    const hasCompletedPayment = ['completed', 'success', 'paid'].includes(reg.payment_status?.toLowerCase()) ||
         ['completed', 'success', 'paid'].includes(reg.payment?.status?.toLowerCase());
+    const isCompleted = reg.registrationCompleted === true && hasCompletedPayment;
 
     // Resolve task assignment based on student domain
     const taskInfo = resolveTaskForStudent(reg, taskCategories, isCompleted);
@@ -180,18 +180,26 @@ exports.getVendorRegistrations = async (req, res) => {
         const sectionStatus = payment_status || status || registrationStatus;
         if (sectionStatus === 'pending') {
             andConditions.push({
-                $and: [
+                $or: [
                     { registrationCompleted: { $ne: true } },
-                    { payment_status: { $nin: ['completed', 'success', 'paid'] } },
-                    { 'payment.status': { $nin: ['completed', 'success', 'paid'] } }
+                    {
+                        $and: [
+                            { payment_status: { $nin: ['completed', 'success', 'paid'] } },
+                            { 'payment.status': { $nin: ['completed', 'success', 'paid'] } }
+                        ]
+                    }
                 ]
             });
         } else if (sectionStatus === 'completed' || sectionStatus === 'approved') {
             andConditions.push({
-                $or: [
+                $and: [
                     { registrationCompleted: true },
-                    { payment_status: { $in: ['completed', 'success', 'paid'] } },
-                    { 'payment.status': { $in: ['completed', 'success', 'paid'] } }
+                    {
+                        $or: [
+                            { payment_status: { $in: ['completed', 'success', 'paid'] } },
+                            { 'payment.status': { $in: ['completed', 'success', 'paid'] } }
+                        ]
+                    }
                 ]
             });
         }
@@ -327,16 +335,24 @@ exports.getFilterOptions = async (req, res) => {
         const { payment_status } = req.query;
         const query = {};
         if (payment_status === 'pending') {
-            query.$and = [
+            query.$or = [
                 { registrationCompleted: { $ne: true } },
-                { payment_status: { $nin: ['completed', 'success', 'paid'] } },
-                { 'payment.status': { $nin: ['completed', 'success', 'paid'] } }
+                {
+                    $and: [
+                        { payment_status: { $nin: ['completed', 'success', 'paid'] } },
+                        { 'payment.status': { $nin: ['completed', 'success', 'paid'] } }
+                    ]
+                }
             ];
         } else if (payment_status === 'completed' || payment_status === 'approved') {
-            query.$or = [
+            query.$and = [
                 { registrationCompleted: true },
-                { payment_status: { $in: ['completed', 'success', 'paid'] } },
-                { 'payment.status': { $in: ['completed', 'success', 'paid'] } }
+                {
+                    $or: [
+                        { payment_status: { $in: ['completed', 'success', 'paid'] } },
+                        { 'payment.status': { $in: ['completed', 'success', 'paid'] } }
+                    ]
+                }
             ];
         }
 
@@ -418,9 +434,9 @@ exports.getVendorStats = async (req, res) => {
         const collegeSet = new Set();
 
         registrations.forEach(reg => {
-            const isCompleted = reg.registrationCompleted === true ||
-                ['completed', 'success', 'paid'].includes(reg.payment_status?.toLowerCase()) ||
+            const hasCompletedPayment = ['completed', 'success', 'paid'].includes(reg.payment_status?.toLowerCase()) ||
                 ['completed', 'success', 'paid'].includes(reg.payment?.status?.toLowerCase());
+            const isCompleted = reg.registrationCompleted === true && hasCompletedPayment;
 
             const teamSize = 1 + (Array.isArray(reg.team_members) ? reg.team_members.length : 0);
             totalMembers += teamSize;
@@ -801,22 +817,31 @@ exports.exportVendorRegistrations = async (req, res) => {
         const query = {};
 
         if (sectionStatus === 'pending') {
-            query.$and = [
+            query.$or = [
                 { registrationCompleted: { $ne: true } },
-                { payment_status: { $nin: ['completed', 'success', 'paid'] } },
-                { 'payment.status': { $nin: ['completed', 'success', 'paid'] } }
+                {
+                    $and: [
+                        { payment_status: { $nin: ['completed', 'success', 'paid'] } },
+                        { 'payment.status': { $nin: ['completed', 'success', 'paid'] } }
+                    ]
+                }
             ];
         } else if (sectionStatus === 'completed' || sectionStatus === 'approved') {
-            query.$or = [
+            query.$and = [
                 { registrationCompleted: true },
-                { payment_status: { $in: ['completed', 'success', 'paid'] } },
-                { 'payment.status': { $in: ['completed', 'success', 'paid'] } }
+                {
+                    $or: [
+                        { payment_status: { $in: ['completed', 'success', 'paid'] } },
+                        { 'payment.status': { $in: ['completed', 'success', 'paid'] } }
+                    ]
+                }
             ];
         }
 
         const registrations = await VendorRegistration.find(query).sort({ createdAt: -1 });
         const exportData = registrations.map((r, index) => {
-            const isCompleted = r.registrationCompleted === true || ['completed', 'success', 'paid'].includes(r.payment_status?.toLowerCase()) || ['completed', 'success', 'paid'].includes(r.payment?.status?.toLowerCase());
+            const hasCompletedPayment = ['completed', 'success', 'paid'].includes(r.payment_status?.toLowerCase()) || ['completed', 'success', 'paid'].includes(r.payment?.status?.toLowerCase());
+            const isCompleted = r.registrationCompleted === true && hasCompletedPayment;
             const paymentStatus = r.payment_status || r.payment?.status || (isCompleted ? 'completed' : 'pending');
             const amount = r.payment?.amount || 399;
             const mobile = r.mobile || r.phone || r.leader?.mobile || r.leader?.phone || '';
