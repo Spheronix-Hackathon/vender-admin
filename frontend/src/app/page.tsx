@@ -79,11 +79,12 @@ export default function Dashboard() {
     );
   }
 
-  const totalStudentsCount = stats.totalVendorStudents || 0;
+  const totalStudentsCount = stats.totalVendorStudents || stats.totalStudents || 0;
+  const totalRegistrationsCount = (stats as any).totalRegistrations || (stats as any).totalVendorRegistrations || 0;
   const approvedStudentsCount = stats.approvedVendorStudents || 0;
   const pendingStudentsCount = stats.pendingVendorPayments || Math.max(0, totalStudentsCount - approvedStudentsCount);
-  const completionPercent = totalStudentsCount > 0 ? Math.round((approvedStudentsCount / totalStudentsCount) * 100) : 100;
-  const pendingPercent = totalStudentsCount > 0 ? Math.round((pendingStudentsCount / totalStudentsCount) * 100) : 0;
+  const completionPercent = totalStudentsCount > 0 ? Math.min(100, Math.round((approvedStudentsCount / totalStudentsCount) * 100)) : 0;
+  const pendingPercent = totalStudentsCount > 0 ? Math.min(100, Math.round((pendingStudentsCount / totalStudentsCount) * 100)) : 0;
 
   return (
     <motion.div
@@ -123,7 +124,8 @@ export default function Dashboard() {
           <KPICard 
             label="Total Students" 
             value={totalStudentsCount} 
-            trend={`+${stats.registrationGrowth || 0}%`} 
+            trend={totalRegistrationsCount > 0 ? `${totalRegistrationsCount} registrations` : undefined} 
+            subtitle={totalRegistrationsCount > 0 ? `Across ${totalRegistrationsCount} registrations` : "Total registered participants"}
             href="/vendor/pending" 
           />
           <KPICard 
@@ -169,13 +171,13 @@ export default function Dashboard() {
             label="Completion Rate" 
             value={`${completionPercent}%`} 
             color="#34c759"
-            subtitle="Approved vs total registrations"
+            subtitle="Approved vs total students"
           />
           <KPICard 
             label="Pending Rate" 
             value={`${pendingPercent}%`} 
             color="#ff9500"
-            subtitle="Pending registration percentage"
+            subtitle="Pending students percentage"
           />
         </div>
       </div>

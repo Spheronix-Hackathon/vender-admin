@@ -50,7 +50,7 @@ exports.getDashboardStats = async (req, res) => {
         let vendorIndividualStudents = 0;
 
         const vendorRegs = await VendorRegistration.find({}).lean();
-        totalVendorStudents = vendorRegs.length;
+        const totalRegistrations = vendorRegs.length;
 
         vendorRegs.forEach(reg => {
             const hasCompletedPayment = ['completed', 'success', 'paid'].includes(reg.payment_status?.toLowerCase()) ||
@@ -59,6 +59,8 @@ exports.getDashboardStats = async (req, res) => {
 
             const teamSize = 1 + (Array.isArray(reg.team_members) ? reg.team_members.length : 0);
             const amt = Number(reg.payment?.amount) || (teamSize * 399);
+
+            totalVendorStudents += teamSize;
 
             if (isCompleted) {
                 approvedVendorStudents += teamSize;
@@ -83,10 +85,12 @@ exports.getDashboardStats = async (req, res) => {
 
         const successRate = totalVendorStudents > 0 
             ? ((approvedVendorStudents / totalVendorStudents) * 100).toFixed(2) 
-            : '100.00';
+            : '0.00';
 
         const result = {
             totalStudents: totalVendorStudents,
+            totalRegistrations,
+            totalVendorRegistrations: totalRegistrations,
             approvedStudents: approvedVendorStudents,
             totalIndividualStudents: vendorIndividualStudents,
             totalTeamStudents: vendorTeamStudents,
@@ -99,7 +103,7 @@ exports.getDashboardStats = async (req, res) => {
             vendorIndividualAmount,
             registeredColleges,
             successRate,
-            registrationGrowth: '0%',
+            registrationGrowth: '0',
             studentSectionRevenue: 0,
             individualApprovedRevenue: 0,
             vendorRevenue,
@@ -358,7 +362,8 @@ exports.getRevenueTimeline = async (req, res) => {
 exports.getAnalyticsSummary = async (req, res) => {
     try {
         const vendorRegs = await VendorRegistration.find({}).lean();
-        const total = vendorRegs.length;
+        const totalRegistrations = vendorRegs.length;
+        let totalStudents = 0;
         let approved = 0;
         let revenue = 0;
 
@@ -368,6 +373,7 @@ exports.getAnalyticsSummary = async (req, res) => {
             const isCompleted = reg.registrationCompleted === true && hasCompletedPayment;
 
             const teamSize = 1 + (Array.isArray(reg.team_members) ? reg.team_members.length : 0);
+            totalStudents += teamSize;
             const amt = Number(reg.payment?.amount) || (teamSize * 399);
 
             if (isCompleted) {
@@ -376,10 +382,11 @@ exports.getAnalyticsSummary = async (req, res) => {
             }
         });
 
-        const pending = Math.max(0, total - approved);
+        const pending = Math.max(0, totalStudents - approved);
 
         const summaryData = {
-            totalRegistrations: total,
+            totalRegistrations,
+            totalStudents,
             approvedStudents: approved,
             pendingStudents: pending,
             revenue

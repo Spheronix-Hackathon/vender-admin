@@ -452,11 +452,11 @@ exports.getVendorStats = async (req, res) => {
 
             if (isCompleted) {
                 completedPayments++;
-                completedStudentsCount++;
+                completedStudentsCount += teamSize;
                 totalRevenue += amount;
             } else {
                 pendingPayments++;
-                pendingStudentsCount++;
+                pendingStudentsCount += teamSize;
             }
 
             if (reg.participationMode === 'team') {
@@ -478,7 +478,7 @@ exports.getVendorStats = async (req, res) => {
             success: true,
             stats: {
                 totalRegistrations,
-                totalStudents: totalRegistrations,
+                totalStudents: totalMembers,
                 totalColleges: collegeSet.size,
                 totalUsers: usersCount,
                 pendingPayments,
