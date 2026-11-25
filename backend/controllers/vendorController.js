@@ -322,9 +322,18 @@ exports.getVendorRegistrations = async (req, res) => {
         const taskCategories = await getTaskCategories();
         const students = docs.map(doc => mapRegistrationToStudent(doc, taskCategories, true));
 
+        let totalStudentParticipants = 0;
+        docs.forEach(doc => {
+            const teamSize = 1 + (Array.isArray(doc.team_members) ? doc.team_members.length : 0);
+            totalStudentParticipants += teamSize;
+        });
+
         res.status(200).json({
             success: true,
-            total: students.length,
+            total: totalStudentParticipants,
+            totalStudents: totalStudentParticipants,
+            totalRegistrations: docs.length,
+            count: students.length,
             students,
             registrations: docs // backward-compatible
         });

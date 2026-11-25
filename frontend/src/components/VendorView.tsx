@@ -195,6 +195,10 @@ function VendorMainContent({ initialSection }: VendorViewProps) {
     };
   }, [students, filterOptions.colleges]);
 
+  const totalStudentParticipants = useMemo(() => {
+    return teamStudentsCount + individualStudentsCount;
+  }, [teamStudentsCount, individualStudentsCount]);
+
   const selectedStudents = useMemo(() => students.filter(s => selectedIds.includes(s._id)), [students, selectedIds]);
   const selectedStudentsCount = useMemo(() => {
     return selectedStudents.reduce((acc, s) => acc + 1 + (Array.isArray(s.team_members) ? s.team_members.length : 0), 0);
@@ -404,7 +408,7 @@ function VendorMainContent({ initialSection }: VendorViewProps) {
           </div>
 
           <p className="text-[#86868b] font-medium">
-            Manage and monitor all participants ({totalStudents})
+            Manage and monitor all participants ({totalStudentParticipants} students{students.length > 0 && students.length !== totalStudentParticipants ? ` across ${students.length} registrations` : ''})
           </p>
         </div>
 
@@ -477,7 +481,12 @@ function VendorMainContent({ initialSection }: VendorViewProps) {
           <div className="flex-1 bg-[#f5f5f7]/30 p-5 rounded-2xl border border-black/5 shadow-sm flex items-center justify-between">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-[#86868b]">Total Students</p>
-              <h3 className="text-3xl font-bold text-[#1d1d1f] mt-1">{totalStudents}</h3>
+              <div className="flex items-baseline gap-2 mt-1">
+                <h3 className="text-3xl font-bold text-[#1d1d1f]">{totalStudentParticipants}</h3>
+                {students.length > 0 && students.length !== totalStudentParticipants && (
+                  <span className="text-xs font-semibold text-[#86868b]">({students.length} registrations)</span>
+                )}
+              </div>
             </div>
             <div className="p-3 bg-[#007aff]/10 text-[#007aff] rounded-xl">
               <Users className="w-6 h-6" />
